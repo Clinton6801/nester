@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -11,7 +10,6 @@ import (
 
 	admindomain "github.com/suncrestlabs/nester/apps/api/internal/domain/admin"
 	"github.com/suncrestlabs/nester/apps/api/internal/domain/vault"
-	"github.com/suncrestlabs/nester/apps/api/internal/repository/postgres"
 )
 
 func (s *AdminService) TriggerRebalance(
@@ -60,7 +58,7 @@ func (s *AdminService) TriggerRebalance(
 	}
 	record, err = s.repository.CreateVaultRebalance(ctx, record)
 	if err != nil {
-		if errors.Is(err, postgres.ErrRebalanceInFlight) {
+		if strings.Contains(err.Error(), "rebalance_in_flight") {
 			return admindomain.RebalanceResponse{}, ErrRebalanceInFlight
 		}
 		return admindomain.RebalanceResponse{}, err

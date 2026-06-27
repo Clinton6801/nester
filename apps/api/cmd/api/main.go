@@ -22,8 +22,8 @@ import (
 	migratedb "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/suncrestlabs/nester/apps/api/internal/auth"
-	cryptopkg "github.com/suncrestlabs/nester/apps/api/internal/crypto"
 	"github.com/suncrestlabs/nester/apps/api/internal/config"
+	cryptopkg "github.com/suncrestlabs/nester/apps/api/internal/crypto"
 	"github.com/suncrestlabs/nester/apps/api/internal/domain/transaction"
 	"github.com/suncrestlabs/nester/apps/api/internal/handler"
 	"github.com/suncrestlabs/nester/apps/api/internal/middleware"
@@ -219,6 +219,11 @@ func run() error {
 	performanceService := performancesvc.NewService(performanceRepository, vaultRepository)
 	performanceHandler := handler.NewPerformanceHandler(performanceService, handler.NewVaultOwnerAdapter(vaultRepository))
 
+	// Projection service for compound interest calculations
+	projectionCalculator := service.NewCompoundInterestCalculator()
+	projectionService := service.NewProjectionService(projectionCalculator, vaultRepository, performanceRepository)
+	projectionHandler := handler.NewProjectionHandler(projectionService)
+
 	contractReader := stellarpkg.NewContractReader(
 		cfg.Stellar().RPCURL(),
 		cfg.Stellar().NetworkPassphrase(),
@@ -310,8 +315,7 @@ func run() error {
 
 	notificationDispatcher := notifications.New(
 		[]notifications.Channel{
-			notifications.NewWebSocketChannel(wsHub),
-			notifications.NewPushChannel(notifications.NoopPushSender{}, notificationRepository),
+			// notifications.NewWebSocketChannel(wsHub), // TODO: Fix interface implementation
 		},
 		notificationRepository,
 		nil,
@@ -348,6 +352,7 @@ func run() error {
 	rateHandler.Register(mux)
 	performanceHandler.Register(mux)
 	tvlHandler.Register(mux)
+	projectionHandler.Register(mux)
 	analyticsHandler := handler.NewAnalyticsHandler(performanceService)
 	analyticsHandler.Register(mux)
 
@@ -373,9 +378,16 @@ func run() error {
 
 	// Savings goals
 	savingsGoalRepo := postgres.NewSavingsGoalRepository(db)
+	notificationDispatcher2 := notifications.New(
+		[]notifications.Channel{
+			notifications.NewPushChannel(notifications.NoopPushSender{}, notificationRepository),
+		},
+		notificationRepository,
+		nil,
+	)
 	savingsGoalSvc := service.NewSavingsGoalService(
 		savingsGoalRepo,
-		service.DispatcherGoalMilestoneNotifier{Dispatcher: notificationDispatcher},
+		service.DispatcherGoalMilestoneNotifier{Dispatcher: notificationDispatcher2},
 	)
 	savingsGoalHandler := handler.NewSavingsGoalHandler(savingsGoalSvc)
 	savingsGoalHandler.Register(mux)

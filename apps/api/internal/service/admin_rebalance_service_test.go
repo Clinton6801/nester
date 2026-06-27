@@ -11,7 +11,6 @@ import (
 
 	admindomain "github.com/suncrestlabs/nester/apps/api/internal/domain/admin"
 	"github.com/suncrestlabs/nester/apps/api/internal/domain/vault"
-	"github.com/suncrestlabs/nester/apps/api/internal/repository/postgres"
 	"github.com/suncrestlabs/nester/apps/api/internal/service"
 )
 
@@ -51,7 +50,7 @@ func (r *rebalanceAdminRepo) HasInFlightRebalance(context.Context, uuid.UUID) (b
 }
 func (r *rebalanceAdminRepo) CreateVaultRebalance(_ context.Context, record admindomain.VaultRebalanceRecord) (admindomain.VaultRebalanceRecord, error) {
 	if r.createFails {
-		return admindomain.VaultRebalanceRecord{}, postgres.ErrRebalanceInFlight
+		return admindomain.VaultRebalanceRecord{}, errors.New("rebalance_in_flight")
 	}
 	if record.ID == uuid.Nil {
 		record.ID = uuid.New()

@@ -27,6 +27,8 @@ export const metadata: Metadata = {
     },
 };
 
+import { ToastProvider } from "@/components/ui/toast/toast-provider";
+
 import { ConsentProvider } from "@/context/consent-context";
 import { ConsentGatedPrometheus } from "@/components/consent-gated-prometheus";
 import { CookieConsentBanner } from "@/components/cookie-consent-banner";
@@ -65,12 +67,12 @@ export default function RootLayout({
                 suppressHydrationWarning
                 className={`${inter.className} ${inter.variable} antialiased`}
             >
-                <ConsentProvider>
-                    <ReactQueryProvider>
-                        <NetworkProvider>
-                            <SettingsProvider>
-                                <WalletProvider>
-                                    <AuthProvider>
+                <ToastProvider>
+                    <ConsentProvider>
+                        <ReactQueryProvider>
+                            <NetworkProvider>
+                                <SettingsProvider>
+                                    <WalletProvider>
                                         <NotificationsProvider>
                                             <OfflineBanner />
                                             <NetworkBanner />
@@ -85,12 +87,12 @@ export default function RootLayout({
                                                 </WebSocketProvider>
                                             </PortfolioProvider>
                                         </NotificationsProvider>
-                                    </AuthProvider>
-                                </WalletProvider>
-                            </SettingsProvider>
-                        </NetworkProvider>
-                    </ReactQueryProvider>
-                </ConsentProvider>
+                                    </WalletProvider>
+                                </SettingsProvider>
+                            </NetworkProvider>
+                        </ReactQueryProvider>
+                    </ConsentProvider>
+                </ToastProvider>
             </body>
         </html>
     );

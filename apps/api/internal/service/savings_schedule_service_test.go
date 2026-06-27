@@ -87,17 +87,56 @@ func (m *memoryGoalRepo) Delete(context.Context, uuid.UUID, uuid.UUID) error    
 func (m *memoryGoalRepo) SumVaultBalance(context.Context, uuid.UUID, string) (decimal.Decimal, error) {
 	return decimal.Zero, nil
 }
+func (m *memoryGoalRepo) UpdateMilestones(context.Context, uuid.UUID, []int) error {
+	return nil
+}
 
 type memoryVaultRepo struct {
 	vaults map[uuid.UUID]vault.Vault
 }
 
+func (m *memoryVaultRepo) CreateVault(context.Context, vault.Vault) (vault.Vault, error) {
+	return vault.Vault{}, nil
+}
 func (m *memoryVaultRepo) GetVault(_ context.Context, id uuid.UUID) (vault.Vault, error) {
 	v, ok := m.vaults[id]
 	if !ok {
 		return vault.Vault{}, vault.ErrVaultNotFound
 	}
 	return v, nil
+}
+func (m *memoryVaultRepo) ListUserVaults(context.Context, uuid.UUID, vault.UserListFilter) ([]vault.Vault, int, error) {
+	return nil, 0, nil
+}
+func (m *memoryVaultRepo) ListVaults(context.Context, vault.ListFilter) ([]vault.Vault, int, error) {
+	return nil, 0, nil
+}
+func (m *memoryVaultRepo) RecordDeposit(context.Context, uuid.UUID, vault.TransactionRecord) error {
+	return nil
+}
+func (m *memoryVaultRepo) UpdateVaultBalances(context.Context, uuid.UUID, decimal.Decimal, decimal.Decimal) error {
+	return nil
+}
+func (m *memoryVaultRepo) ReplaceAllocations(context.Context, uuid.UUID, []vault.Allocation) error {
+	return nil
+}
+func (m *memoryVaultRepo) UpdateVault(context.Context, uuid.UUID, string, vault.VaultStatus) error {
+	return nil
+}
+func (m *memoryVaultRepo) RecordWithdrawal(context.Context, uuid.UUID, vault.TransactionRecord) error {
+	return nil
+}
+func (m *memoryVaultRepo) RecordHarvest(context.Context, vault.HarvestRecordInput) error {
+	return nil
+}
+func (m *memoryVaultRepo) SoftDeleteVault(context.Context, uuid.UUID) error {
+	return nil
+}
+func (m *memoryVaultRepo) ListDeposits(context.Context, uuid.UUID) ([]vault.VaultTransaction, error) {
+	return nil, nil
+}
+func (m *memoryVaultRepo) ListUserVaultTransactions(context.Context, uuid.UUID, uuid.UUID) ([]vault.VaultTransaction, error) {
+	return nil, nil
 }
 
 func TestSavingsScheduleService_CreateAndList(t *testing.T) {

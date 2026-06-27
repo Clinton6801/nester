@@ -14,7 +14,6 @@ import (
 	"github.com/suncrestlabs/nester/apps/api/internal/domain/savingsschedule"
 	"github.com/suncrestlabs/nester/apps/api/internal/scheduler"
 	"github.com/suncrestlabs/nester/apps/api/internal/service"
-	"github.com/suncrestlabs/nester/apps/api/pkg/response"
 )
 
 func applySavingsScheduleMigrations(t *testing.T, db *sql.DB) {
