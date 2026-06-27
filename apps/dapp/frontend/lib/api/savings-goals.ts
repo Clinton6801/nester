@@ -13,7 +13,7 @@ export interface SavingsGoal {
   deadline: string;
   description?: string;
   category?: string;
-  status: string;
+  status?: "active" | "completed";
   current_amount: string | number;
   progress_pct: number;
   /** Vault this goal is linked to, when set (see #688). */

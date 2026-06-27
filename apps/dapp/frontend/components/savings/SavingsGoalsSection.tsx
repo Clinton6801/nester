@@ -1,6 +1,5 @@
 "use client";
 
-import { format } from "date-fns";
 import {
   Briefcase,
   GraduationCap,
@@ -17,6 +16,7 @@ import { cn } from "@/lib/utils";
 import type { SavingsGoal } from "@/lib/api/savings-goals";
 import { useSavingsGoals } from "@/hooks/useSavingsGoals";
 import { useWallet } from "@/components/wallet-provider";
+import { DeadlineBadge } from "@/components/savings/DeadlineBadge";
 
 const CATEGORY_ICONS: Record<string, LucideIcon> = {
   emergency_fund: Shield,
