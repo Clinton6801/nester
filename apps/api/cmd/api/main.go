@@ -107,6 +107,10 @@ func run() error {
 	vaultService.SetHarvestDefaultCompound(cfg.Stellar().HarvestDefaultCompound())
 	vaultHandler := handler.NewVaultHandler(vaultService)
 
+	yieldHarvestRepository := postgres.NewYieldHarvestRepository(db)
+	yieldHarvestService := service.NewYieldHarvestService(yieldHarvestRepository)
+	vaultService.SetYieldHarvestRecorder(yieldHarvestService)
+
 	portfolioService := service.NewPortfolioService(vaultRepository)
 	portfolioHandler := handler.NewPortfolioHandler(portfolioService)
 
@@ -342,6 +346,9 @@ func run() error {
 		environment:  cfg.Environment(),
 		buildVersion: version,
 	}))
+	yieldHarvestHandler := handler.NewYieldHarvestHandler(yieldHarvestService)
+	yieldHarvestHandler.Register(mux)
+
 	vaultHandler.Register(mux)
 	portfolioHandler.Register(mux)
 	transactionHandler.Register(mux)
@@ -386,9 +393,18 @@ func run() error {
 		notificationRepository,
 		nil,
 	)
+	webhookRepo := postgres.NewWebhookRepository(db)
+	webhookSvc := service.NewWebhookService(webhookRepo)
+	webhookHandler := handler.NewWebhookHandler(webhookSvc)
+	webhookHandler.Register(mux)
 	savingsGoalSvc := service.NewSavingsGoalService(
 		savingsGoalRepo,
-		service.DispatcherGoalMilestoneNotifier{Dispatcher: notificationDispatcher2},
+		service.CompositeGoalMilestoneNotifier{
+			Notifiers: []service.GoalMilestoneNotifier{
+				service.DispatcherGoalMilestoneNotifier{Dispatcher: notificationDispatcher2},
+				service.WebhookGoalMilestoneNotifier{Svc: webhookSvc},
+			},
+		},
 	)
 	savingsGoalHandler := handler.NewSavingsGoalHandler(savingsGoalSvc)
 	savingsGoalHandler.Register(mux)
@@ -448,6 +464,15 @@ func run() error {
 
 	mux.HandleFunc("GET /ws", wsHub.ServeWs)
 
+	// APY snapshot scheduler and history endpoint
+	apySnapshotRepo := postgres.NewAPYSnapshotRepository(db)
+	apySvc := service.NewAPYService(apySnapshotRepo)
+	apyHandler := handler.NewAPYHandler(apySvc)
+	apyHandler.Register(mux)
+	apySchedulerCtx, cancelAPYScheduler := context.WithCancel(context.Background())
+	defer cancelAPYScheduler()
+	go apySvc.StartScheduler(apySchedulerCtx)
+
 	authRules := []middleware.RouteRule{
 		{PathPrefix: "/health", Public: true},
 		{PathPrefix: "/healthz", Public: true},
@@ -455,6 +480,7 @@ func run() error {
 		{PathPrefix: "/ws", Public: true},
 		{PathPrefix: "/api/v1/auth/", Public: true},
 		{PathPrefix: "/api/v1/banks/", Public: true},
+		{PathPrefix: "/api/v1/yields/", Public: true},
 		{PathPrefix: "/api/v1/admin/", Public: false, Role: "admin"},
 		{PathPrefix: "/api/v1/", Public: false},
 	}

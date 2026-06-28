@@ -58,6 +58,7 @@ type VaultService struct {
 	repository             vault.Repository
 	depositInvoker         VaultDepositInvoker
 	defaultHarvestCompound bool
+	yieldRecorder          YieldHarvestRecorder
 }
 
 // ── Input types ──────────────────────────────────────────────────────────────
@@ -117,6 +118,12 @@ func (s *VaultService) SetDepositInvoker(invoker VaultDepositInvoker) {
 // SetHarvestDefaultCompound configures the compound flag when the request omits it.
 func (s *VaultService) SetHarvestDefaultCompound(compound bool) {
 	s.defaultHarvestCompound = compound
+}
+
+// SetYieldHarvestRecorder wires an optional recorder that persists yield harvest
+// history entries whenever HarvestVault succeeds.
+func (s *VaultService) SetYieldHarvestRecorder(recorder YieldHarvestRecorder) {
+	s.yieldRecorder = recorder
 }
 
 // ── Existing methods ─────────────────────────────────────────────────────────
@@ -216,6 +223,9 @@ func (s *VaultService) RecordDeposit(ctx context.Context, input RecordDepositInp
 	if s.depositInvoker != nil {
 		stroops := input.Amount.Mul(decimal.NewFromInt(10_000_000)).Round(0).IntPart()
 		if err := s.depositInvoker.DepositToVault(ctx, existing.ContractAddress, stroops); err != nil {
+			if strings.Contains(err.Error(), "#21") {
+				return vault.Vault{}, vault.ErrBelowMinDeposit
+			}
 			return vault.Vault{}, fmt.Errorf("on-chain deposit failed: %w", err)
 		}
 	}
@@ -568,6 +578,17 @@ func (s *VaultService) HarvestVault(ctx context.Context, input HarvestVaultInput
 		TransactionHash: txHash,
 	}); err != nil {
 		return HarvestResult{}, err
+	}
+
+	if s.yieldRecorder != nil {
+		_ = s.yieldRecorder.RecordHarvest(ctx, YieldHarvestRecord{
+			UserID:      input.UserID,
+			VaultID:     input.VaultID,
+			Amount:      netYield,
+			Currency:    existing.Currency,
+			HarvestedAt: time.Now().UTC(),
+			TxHash:      txHash,
+		})
 	}
 
 	return HarvestResult{
