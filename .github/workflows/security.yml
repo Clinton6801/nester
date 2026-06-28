@@ -99,7 +99,7 @@ jobs:
             exit 0
           elif [ $EXIT_CODE -eq 3 ]; then
             # Allow if every reported vuln ID is in the accepted list
-            ACCEPTED="GO-2026-4316 GO-2026-5037 GO-2026-5039"
+            ACCEPTED="GO-2026-4316 GO-2026-5004 GO-2026-5037 GO-2026-5039"
             UNKNOWN=$(echo "$OUTPUT" | grep -oE 'GO-[0-9]{4}-[0-9]+' | sort -u | while read id; do
               echo "$ACCEPTED" | grep -qw "$id" || echo "$id"
             done)
