@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Calculator, TrendingUp } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -43,16 +43,19 @@ export function SavingsCalculator({ className }: SavingsCalculatorProps) {
       return projectionApi.calculateProjection(input);
     },
     enabled: shouldCalculate && !!formData.initialDeposit && !!formData.apy,
-    onError: (error: Error) => {
+  });
+
+  useEffect(() => {
+    if (projectionQuery.isError) {
       showError("Failed to calculate projection", {
         title: "Calculation Error",
         action: {
           label: "Try again",
-          onClick: () => setShouldCalculate(true)
-        }
+          onClick: () => setShouldCalculate(true),
+        },
       });
     }
-  });
+  }, [projectionQuery.isError, showError]);
 
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -242,11 +245,13 @@ export function SavingsCalculator({ className }: SavingsCalculatorProps) {
                         tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
                       />
                       <Tooltip 
-                        formatter={(value: number, name: string) => [
-                          `$${value.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
-                          name === "total" ? "Total Balance" : name === "principal" ? "Principal" : "Yield"
+                        formatter={(value, name) => [
+                          typeof value === "number"
+                            ? `$${value.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                            : String(value ?? ""),
+                          String(name) === "total" ? "Total Balance" : String(name) === "principal" ? "Principal" : "Yield"
                         ]}
-                        labelFormatter={(month: number) => `Month ${month}`}
+                        labelFormatter={(month) => `Month ${month}`}
                         contentStyle={{
                           backgroundColor: "white",
                           border: "1px solid #e5e7eb",
