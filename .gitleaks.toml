@@ -12,9 +12,3 @@ paths = [
     '''\.env\..*''',
     '''apps/intelligence/\.env''',
 ]
-# Stellar testnet secret key used across internal/stellar test fixtures and
-# README examples. This is a known, intentionally-public test account — not
-# a credential that grants access to any production resource.
-regexes = [
-    '''SBVH6U5PEFXPXPJ4GPXVYACRF4NZQA5QBCZLLPQGHXWWK6NXPV6IYGG''',
-]
