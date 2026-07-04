@@ -44,9 +44,6 @@ pnpm-debug.log*
 *.exe
 bin/
 apps/api/tmp/
-services/api/bin/
-services/api/server
-services/api/server.exe
 
 # Vercel
 .vercel
