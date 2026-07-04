@@ -164,14 +164,24 @@ Severity: **Critical · High · Medium · Low · Trivial**. Each finding: root c
 - **Original claim (mis-scoped):** `seed.sql` references removed `email`/`name`; healthcheck
   path mismatch. **Both were already resolved** in the audited tree (seed uses
   `wallet_address`/`display_name`/`kyc_status`; `/health` is served and probed consistently).
-- **Actual defect:** migrations `020_update_users_table`≡`010_update_users_table` and
-  `021_add_user_roles`≡`012_add_user_roles` are **byte-for-byte duplicates**. A fresh
-  `golang-migrate` `Up()` fails at `020` (`ADD COLUMN kyc_status` with no `IF NOT EXISTS`,
-  column already added by `010`); the paired downs are also broken.
-- **Fix (applied):** neutralized `020`/`021` (up+down) to `SELECT 1;` no-ops, preserving the
-  version sequence. Verified by inspection; live `migrate up` pending a Postgres env (Docker
-  Desktop was not running).
-- **Effort:** S. **Risk:** Low. **Status:** fixed (`d3f6a46`).
+- **Actual defect — the migration chain never applied cleanly on a fresh DB.** Live
+  `psql` replay against Postgres 16 (`ON_ERROR_STOP=1`) revealed **four** distinct
+  pre-existing breaks. `main` never reached the later ones because it died at `020` first:
+  1. **`020`≡`010`, `021`≡`012`** — byte-for-byte duplicate migrations; `Up()` fails at `020`
+     (`ADD COLUMN kyc_status` with no `IF NOT EXISTS`).
+  2. **`023`** creates a unique index on `transaction_hash`, but that column is named
+     `tx_hash` until `033` renames it — an **ordering bug** (index created before the column
+     name exists).
+  3. **`033`≡`035`** — duplicate; `035` repeats `RENAME tx_hash → transaction_hash`, which
+     fails after `033` already renamed it.
+  4. **`034`** uses `UNIQUE (…, COALESCE(bank_code, ''))` as a **table constraint** —
+     invalid Postgres syntax (expressions require a unique *index*).
+- **Fix (applied):** neutralized `020`/`021`/`035` (up+down) to `SELECT 1;` no-ops; pointed
+  `023`'s index at `tx_hash` (it follows the column through the `033` rename); converted
+  `034`'s constraint to an expression unique index.
+- **Verified LIVE:** full 53-migration **up chain applies clean**, and the **full up→down
+  cycle** rolls back to an empty schema (Postgres 16, Docker). No longer inspection-only.
+- **Effort:** S. **Risk:** Low. **Status:** fixed (`d3f6a46` + follow-up).
 
 ## C. Security
 
