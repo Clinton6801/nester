@@ -19,7 +19,6 @@ jobs:
       intelligence: ${{ steps.filter.outputs.intelligence }}
       dapp: ${{ steps.filter.outputs.dapp }}
       api: ${{ steps.filter.outputs.api }}
-      internal: ${{ steps.filter.outputs.internal }}
       contracts: ${{ steps.filter.outputs.contracts }}
       shared: ${{ steps.filter.outputs.shared }}
     steps:
@@ -48,10 +47,6 @@ jobs:
               - 'apps/dapp/**'
             api:
               - 'apps/api/**'
-            internal:
-              - 'internal/**'
-              - 'go.mod'
-              - 'go.sum'
             contracts:
               - 'packages/contracts/**'
               - 'scripts/contract-audit.sh'
@@ -179,7 +174,7 @@ jobs:
         continue-on-error: true
 
       - uses: actions/setup-go@v5
-        if: needs.changes.outputs.api == 'true' || needs.changes.outputs.internal == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.api == 'true' || needs.changes.outputs.shared == 'true'
         with:
           go-version-file: apps/api/go.mod
           cache: true
@@ -345,46 +340,6 @@ jobs:
         run: go test -race -timeout 120s -count=1 -run Integration ./...
         continue-on-error: true
 
-
-  internal-stellar:
-    name: Internal (Go)
-    needs: changes
-    if: needs.changes.outputs.internal == 'true' || needs.changes.outputs.shared == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check for Go module
-        id: check
-        run: |
-          if [ -f "go.mod" ] && [ -d "internal" ]; then
-            echo "has_module=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_module=false" >> $GITHUB_OUTPUT
-          fi
-
-      - uses: actions/setup-go@v5
-        if: steps.check.outputs.has_module == 'true'
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Run tests
-        if: steps.check.outputs.has_module == 'true'
-        run: go test -v -race ./internal/...
-
-      - name: Check formatting
-        if: steps.check.outputs.has_module == 'true'
-        run: |
-          if [ "$(gofmt -s -l ./internal | wc -l)" -gt 0 ]; then
-            echo "Code formatting issues found"
-            gofmt -s -d ./internal
-            exit 1
-          fi
-
-      - name: Run vet
-        if: steps.check.outputs.has_module == 'true'
-        run: go vet ./internal/...
 
   contracts:
     name: Contracts (Rust)
