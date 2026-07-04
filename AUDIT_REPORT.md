@@ -1,12 +1,79 @@
 # Nester — Post-Campaign Repository Audit
 
-**Date:** 2026-07-04 · **Branch:** `fix/661-txhistory` · **Scope:** whole monorepo, breadth-first (980 tracked files)
-**Mode:** report only — no code changes applied. Fixes await approval.
+**Date:** 2026-07-04 · **Audited HEAD:** `9ed4013` (tag `audit-baseline-2026-07-04`) · **Scope:** whole monorepo, breadth-first (980 tracked files)
+**Status:** cleanup in progress on branch `chore/repo-audit-cleanup` (not merged; not pushed).
 
 > Companion to the existing maintainer queue in [`OSS_CLEANUP.md`](OSS_CLEANUP.md) and the
 > [`CI_CD_VALIDATION_REPORT.md`](CI_CD_VALIDATION_REPORT.md). This report is the categorized,
 > severity-rated superset. Where an item already lives in `OSS_CLEANUP.md` it is cross-referenced,
 > not duplicated.
+
+---
+
+# Implementation Update (2026-07-04)
+
+The initial audit was written before any code changes. Execution then corrected several
+findings and uncovered new ones. **This section is the source of truth where it disagrees
+with the original finding bodies below.**
+
+### Corrections to the original audit
+
+- **B1 was wrong (the single most important correction).** The original audit rated the
+  stubbed Soroban layer in `internal/stellar` as a Critical/High *production* gap. It is
+  not. That code lives in an **orphaned root Go module (`github.com/Damola09/nester`) that
+  nothing imports.** The live protocol path is `apps/api/internal/stellar`
+  (`invoker.go`, `reader.go`, `service/soroban_vault_chain_invoker.go`) — a separate,
+  non-stubbed implementation. The correct fix is to **delete the dead module**, not
+  implement the stub. See **A5 — Dead Modules**.
+
+- **B3 was mis-scoped.** `scripts/seed.sql` was *already* aligned to the post-rename users
+  schema (`wallet_address`/`display_name`/`kyc_status`) — no drift. The real defect in that
+  area: **migrations `020`/`021` are byte-for-byte duplicates of `010`/`012`**, which break
+  a fresh `migrate up` (020 re-adds an existing column with no `IF NOT EXISTS`). Fixed by
+  neutralizing 020/021 (up+down) to no-ops. See the revised B3.
+
+- **Healthcheck (was folded into B3) is a non-issue.** Verified: `apps/api` serves both
+  `/health` and `/healthz`; docker-compose probes `/health`; the intelligence service serves
+  `/health`. Consistent. The only `/healthz` references are in the (to-be-deleted)
+  `services/api` README.
+
+- **F1 root cause identified.** The pnpm/npm lockfile drift wasn't just stray lockfiles —
+  **CI (`ci.yml`) ran `npm install`/`npm run …` in two jobs** inside a pnpm workspace, which
+  is what produced the drift. Fixed by converting those jobs to pnpm (+ removing 3 stray
+  `package-lock.json`, adding an only-allow-pnpm guard). See revised F1.
+
+### New findings uncovered during implementation
+
+- **A5 — Dead Modules (High):** an entire unused Go module at the repo root (`go.mod`,
+  `go.sum`, `internal/stellar`) under a personal namespace, imported by nothing.
+  Recommendation: **delete** (not rename, not `go.work`). Detailed below.
+- **G6 — Duplicate DB migrations (High):** `020`≡`010`, `021`≡`012` (see revised B3).
+- **G7 — npm baked into CI (Medium):** root cause of F1 (see revised F1).
+- **Silent false-positive tests (Medium):** two `#[should_panic]` strategy tests passed on
+  the wrong error (`ConfigOutOfRange` before reaching their real check) after a campaign PR
+  added weight-band validation. Fixed + pinned to real error codes. (Also surfaced 3 hard
+  failures fixed the same way.)
+- **fix/661-txhistory CI was red** independent of cleanup: lockfile missing `jspdf`, and
+  wallet test mocks missing the new `WalletState.user` field. Both fixed on that branch.
+
+### Architecture decisions (maintainer-approved)
+
+- **A1 — delete `services/api`.** Confirmed: not built by docker-compose, imported by
+  nothing, a strict subset of `apps/api` (which has the full intelligence proxy/relay +
+  Prometheus client, wired in `main.go`). Nothing to migrate.
+- **A3 — delete both mobile stacks.** Done (`mobile/` Flutter + `apps/mobile/` Expo);
+  lockfile regenerated. No CI/turbo/workspace/deploy dependents.
+- **A4 — delete the root Go module** (was "rename/`go.work`"; now known to be dead — see A5).
+
+### Execution log (branch `chore/repo-audit-cleanup`, atomic commits)
+
+`45b6477` audit report · `efaf937` untrack api.exe · `f1167cd` rm CI scratch ·
+`2323e0f` prune .gitignore · `de6756b` Rust strategy tests · `5a89774` pnpm standardization ·
+`d3f6a46` dup-migration fix · `6b617fa` JWT prod guard · `becec63` remove mobile stacks ·
+(+ `services/api` and root-module deletions in progress).
+
+Frontend blocker fixes live on `fix/661-txhistory`: `2e2d2dc` jspdf lockfile, `5184f3a`
+WalletState mocks.
 
 ## Repository shape
 
@@ -53,20 +120,38 @@ Severity: **Critical · High · Medium · Low · Trivial**. Each finding: root c
 - **Fix:** choose one mobile stack; archive/delete the other. Neither has tests, so pick by product intent.
 - **Effort:** S (decision) + S (deletion). **Risk:** Low.
 
-### A4 — Root `go.mod` under personal namespace, unclear purpose · **Medium**
-- **File:** `go.mod` (`github.com/Damola09/nester`), `internal/stellar` likely its only member.
-- **Root cause:** repo-root Go module left from early scaffolding; `apps/api` and `services/api` are their own modules.
-- **Fix:** fold `internal/stellar` into the canonical module or make the root module the workspace root with a `go.work`; rename off the personal namespace regardless.
-- **Effort:** S–M. **Risk:** Medium (import churn).
+### A4 — Root `go.mod` under personal namespace → superseded by A5 · **resolved-as A5**
+- Investigation showed the root module isn't merely mis-named — it is **dead** (nothing
+  imports `github.com/Damola09/nester`; sole member `internal/stellar` is unused; `apps/api`
+  has its own `internal/stellar`). Reclassified: **delete**, not rename/`go.work`. See **A5**.
+
+### A5 — Dead Modules: orphaned root Go module · **High**
+- **Files:** `go.mod`, `go.sum`, `internal/stellar/**` (module `github.com/Damola09/nester`).
+- **Evidence:** `git grep "Damola09/nester"` → zero importers; no `go.work`; `apps/api` uses
+  its own `apps/api/internal/stellar` (`invoker.go`/`reader.go`/`service/soroban_vault_chain_invoker.go`).
+  The B1 "stubbed Soroban" code (`contract.go`, `vault_reader.go`) lives *here* and is
+  therefore dead. Only CI references: `ci.yml` `internal-stellar` job (self-guards to a no-op
+  when the module is gone) + `security.yml` audit-go matrix `.` entry.
+- **Consequence:** dead code under a personal namespace; a false "critical protocol gap"
+  (B1); wasted CI; onboarding confusion.
+- **Fix:** delete `go.mod`, `go.sum`, `internal/stellar/`; drop the `internal-stellar` CI job,
+  the `internal` paths-filter, and the `.` audit-go matrix entry.
+- **Effort:** S. **Risk:** Low (imported by nothing). **Status:** approved; executing.
 
 ## B. Bugs / Incomplete features
 
-### B1 — `internal/stellar` Soroban contract layer is stubbed · **High**
-- **Files:** `internal/stellar/contract.go:45,52,110,211,214`, `vault_reader.go:47` (7 non-test placeholder sites).
-- **Root cause:** contract invocation/simulation was never implemented — returns hardcoded `GasEstimate = 10000`, `TransactionHash = "0x00"`, `nil` invocations. Tests explicitly assert placeholder behavior (`contract_test.go:315,780`).
-- **Consequence:** any feature depending on on-chain vault reads/tx submission is non-functional; silent wrong values instead of errors.
-- **Fix:** implement real Soroban RPC simulate/submit, or gate the stub behind an explicit `ErrNotImplemented` + feature flag so callers fail loud. Track as a feature, not a quick fix.
-- **Effort:** L. **Risk:** High (core protocol path). *Manual-only.*
+### B1 — ~~Soroban contract layer is stubbed~~ → CORRECTED: stub is in dead code · **downgraded**
+- **Original claim (wrong):** the Soroban layer in `internal/stellar` is stubbed, so on-chain
+  reads/tx submission are non-functional — rated a critical production gap.
+- **Reality:** those placeholder sites (`internal/stellar/contract.go`, `vault_reader.go`)
+  live in the **orphaned root module `github.com/Damola09/nester`, which nothing imports**.
+  The production API uses `apps/api/internal/stellar` (a separate, non-stubbed
+  implementation). The stub is dead code.
+- **Fix:** none needed on the "stub" itself — remove the dead module (**A5**). The live
+  `apps/api/internal/stellar` path should be reviewed on its own merits, but it is not the
+  stubbed code the original finding pointed at.
+- **Lesson:** two `internal/stellar` packages in different modules made a dead file look like
+  a live critical gap. Verify importers before rating severity.
 
 ### B2 — WebSocket notification channel disabled by TODO · **Medium**
 - **File:** `apps/api/cmd/api/main.go:322` — `// notifications.NewWebSocketChannel(wsHub) // TODO: Fix interface implementation`.
@@ -75,9 +160,18 @@ Severity: **Critical · High · Medium · Low · Trivial**. Each finding: root c
 - **Fix:** reconcile the channel interface and re-enable, or remove the dead wiring + frontend hook if WS is out of scope.
 - **Effort:** M. **Risk:** Medium.
 
-### B3 — `seed.sql` schema drift + healthcheck path mismatch · **High** *(tracked in OSS_CLEANUP.md)*
-- **Files:** `scripts/seed.sql`, `docker-compose.yml` (`/healthz` vs README `/health`).
-- Already in `OSS_CLEANUP.md` blocking list (migration 007 renamed `name`→`display_name`, added `wallet_address`/`kyc_status`; seed still references `email`/`name`). Listed here for completeness. **Fix + effort:** S. **Risk:** Low. Auto-fixable.
+### B3 — CORRECTED: duplicate DB migrations (seed & healthcheck were already fine) · **High → fixed**
+- **Original claim (mis-scoped):** `seed.sql` references removed `email`/`name`; healthcheck
+  path mismatch. **Both were already resolved** in the audited tree (seed uses
+  `wallet_address`/`display_name`/`kyc_status`; `/health` is served and probed consistently).
+- **Actual defect:** migrations `020_update_users_table`≡`010_update_users_table` and
+  `021_add_user_roles`≡`012_add_user_roles` are **byte-for-byte duplicates**. A fresh
+  `golang-migrate` `Up()` fails at `020` (`ADD COLUMN kyc_status` with no `IF NOT EXISTS`,
+  column already added by `010`); the paired downs are also broken.
+- **Fix (applied):** neutralized `020`/`021` (up+down) to `SELECT 1;` no-ops, preserving the
+  version sequence. Verified by inspection; live `migrate up` pending a Postgres env (Docker
+  Desktop was not running).
+- **Effort:** S. **Risk:** Low. **Status:** fixed (`d3f6a46`).
 
 ## C. Security
 
@@ -142,12 +236,18 @@ Severity: **Critical · High · Medium · Low · Trivial**. Each finding: root c
 
 ## F. Dependencies / DX
 
-### F1 — Mixed package managers: pnpm + npm lockfiles coexist · **Medium**
-- **Files:** root `pnpm-lock.yaml` (825 KB) **and** `package-lock.json`; plus `apps/dapp/frontend/package-lock.json` (584 KB). `pnpm-workspace.yaml` + `turbo.json` indicate pnpm is intended.
-- **Root cause:** contributors ran `npm install` in a pnpm workspace.
-- **Consequence:** divergent dependency trees, nondeterministic installs, CI/lockfile drift.
-- **Fix:** standardize on pnpm; delete stray `package-lock.json` files; add a `preinstall` "only-allow pnpm" guard.
-- **Effort:** S–M. **Risk:** Low–Medium (verify installs after).
+### F1 — Mixed package managers: pnpm + npm · **Medium → fixed** (root cause: G7)
+- **Files:** 3 stray `package-lock.json` (root, `apps/dapp/frontend`, `apps/website`) alongside `pnpm-lock.yaml`.
+- **Root cause (corrected):** not just contributors locally — **`ci.yml` itself ran
+  `npm install`/`npm run …` in the `dapp-frontend` job and the security audit job** (see
+  **G7**). npm resolving inside a pnpm workspace is what drifted the lockfiles.
+- **Fix (applied):** converted both CI jobs to pnpm (`pnpm/action-setup` + `cache: pnpm` +
+  `pnpm install --frozen-lockfile`); removed the 3 stray lockfiles; added an
+  `only-allow pnpm` preinstall guard; regenerated `pnpm-lock.yaml`. Frozen install verified.
+- **Effort:** S–M. **Risk:** Low. **Status:** fixed (`5a89774`).
+
+### G7 — npm baked into CI (root cause of F1) · **Medium → fixed**
+- `ci.yml` `dapp-frontend` + `security` jobs used `npm` in a pnpm monorepo. Converted to pnpm.
 
 ### F2 — Documentation drift · **Low**
 - `services/api/README.md` describes domains it doesn't implement; healthcheck path disagreement (B3); multiple overlapping audit docs at root (`OSS_CLEANUP.md`, `CI_CD_VALIDATION_REPORT.md`, `AUDIT_THREAT_MODEL.md`, `SEP24_DECISION.md`, now this).
