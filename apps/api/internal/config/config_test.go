@@ -854,6 +854,41 @@ func TestLoadAllowedOriginsRejectsWildcard(t *testing.T) {
 	}
 }
 
+// TestLoadRejectsDefaultJWTSecretInProduction verifies the .env.example dev default
+// AUTH_JWT_SECRET is rejected in production (it passes the length check, so it needs
+// an explicit guard).
+func TestLoadRejectsDefaultJWTSecretInProduction(t *testing.T) {
+	baseEnv(t)
+	requiredEnv(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("ALLOWED_ORIGINS", "https://app.example.com")
+	t.Setenv("AUTH_JWT_SECRET", "dev-nester-jwt-secret-change-in-production")
+
+	chdir(t, t.TempDir())
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected Load() to fail when AUTH_JWT_SECRET uses the dev default in production")
+	}
+	if !strings.Contains(err.Error(), "development default") {
+		t.Fatalf("expected dev-default error, got %q", err.Error())
+	}
+}
+
+// TestLoadAllowsDefaultJWTSecretInDevelopment verifies the guard only applies outside development.
+func TestLoadAllowsDefaultJWTSecretInDevelopment(t *testing.T) {
+	baseEnv(t)
+	requiredEnv(t)
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("AUTH_JWT_SECRET", "dev-nester-jwt-secret-change-in-production")
+
+	chdir(t, t.TempDir())
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("expected Load() to succeed in development with the dev default secret, got %v", err)
+	}
+}
+
 // TestLoadAllowedOriginsRejectsMalformed verifies malformed origins are rejected.
 func TestLoadAllowedOriginsRejectsMalformed(t *testing.T) {
 	cases := []struct {
