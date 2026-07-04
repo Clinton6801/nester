@@ -123,25 +123,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Lint (security rules)
-        run: npm run lint
+        run: pnpm run lint
         continue-on-error: true
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
       - name: Test
-        run: npm run test:coverage
+        run: pnpm run test:coverage
 
       - name: Audit JS dependencies (dapp)
-        run: npm audit --audit-level=moderate
+        run: pnpm audit --audit-level=moderate
         continue-on-error: true
 
   security:
@@ -220,19 +223,22 @@ jobs:
         working-directory: apps/api
         continue-on-error: true
 
+      - uses: pnpm/action-setup@v4
+        if: needs.changes.outputs.dapp == 'true' || needs.changes.outputs.shared == 'true'
+
       - uses: actions/setup-node@v4
         if: needs.changes.outputs.dapp == 'true' || needs.changes.outputs.shared == 'true'
         with:
           node-version: 22
+          cache: pnpm
 
       - name: Install dapp dependencies for audit
         if: needs.changes.outputs.dapp == 'true' || needs.changes.outputs.shared == 'true'
-        run: npm install
-        working-directory: apps/dapp/frontend
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Audit JavaScript dependencies
         if: needs.changes.outputs.dapp == 'true' || needs.changes.outputs.shared == 'true'
-        run: npm audit --audit-level=high
+        run: pnpm audit --audit-level=high
         working-directory: apps/dapp/frontend
         continue-on-error: true
 
