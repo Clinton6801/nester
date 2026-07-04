@@ -68,6 +68,9 @@ fn disable_circuit_breaker(h: &NesterHarness) {
 #[test]
 fn test_full_lifecycle_deposit_to_withdraw() {
     let h = NesterHarness::setup();
+    // Balanced default caps max_weight_bps at 6500; widen so the single 100% weight is valid.
+    h.strategy()
+        .update_strategy_params(&h.admin, &500u32, &10_000u32, &100u32);
     let user = h.create_user();
     let aave = symbol_short!("aave");
 
