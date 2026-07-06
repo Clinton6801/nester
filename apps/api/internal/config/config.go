@@ -13,6 +13,10 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// defaultDevJWTSecret is the placeholder value shipped in .env.example. It is long
+// enough to pass the length check, so it is rejected explicitly outside development.
+const defaultDevJWTSecret = "dev-nester-jwt-secret-change-in-production"
+
 type Config struct {
 	environment           string
 	server                ServerConfig
@@ -487,6 +491,11 @@ func (c *Config) validate(loader *envLoader) {
 
 	if len(strings.TrimSpace(c.auth.secret)) < 32 {
 		loader.addError("AUTH_JWT_SECRET must be at least 32 characters")
+	}
+
+	if (c.environment == "production" || c.environment == "staging") &&
+		strings.TrimSpace(c.auth.secret) == defaultDevJWTSecret {
+		loader.addError("AUTH_JWT_SECRET must not use the development default in production or staging")
 	}
 
 	if c.auth.tokenExpiry <= 0 {

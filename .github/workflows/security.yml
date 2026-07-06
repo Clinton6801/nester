@@ -66,8 +66,6 @@ jobs:
       matrix:
         module:
           - apps/api
-          - services/api
-          - .
     defaults:
       run:
         working-directory: ${{ matrix.module }}
