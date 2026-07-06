@@ -112,9 +112,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.dapp == 'true' || needs.changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/dapp/frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -129,14 +126,14 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Lint (security rules)
-        run: pnpm run lint
+        run: pnpm --filter @nester/dapp run lint
         continue-on-error: true
 
       - name: Build
-        run: pnpm run build
+        run: pnpm --filter @nester/dapp run build
 
       - name: Test
-        run: pnpm run test:coverage
+        run: pnpm --filter @nester/dapp run test:coverage
 
       - name: Audit JS dependencies (dapp)
         run: pnpm audit --audit-level=moderate
