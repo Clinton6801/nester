@@ -178,6 +178,7 @@ type SavingsGoal struct {
 	CurrentAmount      decimal.Decimal `json:"current_amount"`
 	ProgressPct        float64         `json:"progress_pct"`
 	NotifiedMilestones []int           `json:"-"`
+	DeadlineRemindersSent []int        `json:"-"`
 	CreatedAt          time.Time       `json:"created_at"`
 	UpdatedAt          time.Time       `json:"updated_at"`
 	// Completion fields (#716).
@@ -235,6 +236,8 @@ type Repository interface {
 	Delete(ctx context.Context, id, userID uuid.UUID) error
 	SumVaultBalance(ctx context.Context, userID uuid.UUID, currency string) (decimal.Decimal, error)
 	UpdateMilestones(ctx context.Context, goalID uuid.UUID, milestones []int) error
+	UpdateDeadlineReminders(ctx context.Context, goalID uuid.UUID, reminders []int) error
+	ListActiveApproachingDeadline(ctx context.Context, maxDays int) ([]SavingsGoal, error)
 	ListContributions(ctx context.Context, goalID, userID uuid.UUID, params interface{}) ([]GoalContribution, int, string, error)
 	// SumRecentDeposits sums vault deposit amounts for the user in the given currency since `since` (#714).
 	SumRecentDeposits(ctx context.Context, userID uuid.UUID, currency string, since time.Time) (decimal.Decimal, error)
@@ -283,4 +286,21 @@ func DefaultColorForCategory(cat GoalCategory) string {
 		return v[1]
 	}
 	return "slate"
+}
+
+// GoalTemplate represents a pre-built savings goal configuration.
+type GoalTemplate struct {
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	Description     string          `json:"description"`
+	Category        GoalCategory    `json:"category"`
+	SuggestedAmount decimal.Decimal `json:"suggested_amount"`
+	Currency        string          `json:"currency"`
+	SuggestedMonths int             `json:"suggested_months"`
+	Icon            string          `json:"icon"`
+}
+
+type TemplateRepository interface {
+	List(ctx context.Context) ([]GoalTemplate, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*GoalTemplate, error)
 }
