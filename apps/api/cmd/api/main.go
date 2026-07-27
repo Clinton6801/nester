@@ -181,6 +181,9 @@ func run() error {
 
 	userRepository := postgres.NewUserRepository(db)
 	userService := service.NewUserService(userRepository)
+	if accountCipher != nil {
+		userService.WithCipher(accountCipher)
+	}
 	userHandler := handler.NewUserHandler(userService)
 	userVaultsSvc := service.NewUserVaultsService(vaultRepository)
 	userHandler.SetUserVaultsService(userVaultsSvc)
