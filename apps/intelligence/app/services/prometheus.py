@@ -610,6 +610,28 @@ async def stream_chat(
                     yield "data: [DONE]\n\n"
                     return
 
+        except anthropic.APIStatusError as exc:
+            # 429 (rate-limited) and 529 (Anthropic overloaded) are both
+            # transient, caller-should-retry-shortly conditions — give the
+            # user a distinct message from a hard failure instead of the
+            # generic "trouble connecting" catch-all below (#928).
+            if exc.status_code in (429, 529):
+                logger.warning(
+                    "Anthropic rate-limit/overload for user %s (status %s)",
+                    user_id,
+                    exc.status_code,
+                )
+                yield (
+                    "data: Prometheus is receiving a lot of requests right now. "
+                    "Please wait a moment and try again.\n\n"
+                )
+            else:
+                logger.exception(
+                    "Anthropic API error for user %s (status %s)", user_id, exc.status_code
+                )
+                yield "data: Sorry, I had trouble connecting. Please try again.\n\n"
+            yield "data: [DONE]\n\n"
+            return
         except Exception:
             logger.exception("Anthropic streaming error for user %s", user_id)
             yield "data: Sorry, I had trouble connecting. Please try again.\n\n"
@@ -640,6 +662,18 @@ async def generate_coaching(
 ) -> CoachingResponse:
     """Generate deposit schedule and progress assessment for a savings goal."""
     from app.models.coaching import DepositScheduleItem
+
+    if not request.ai_insights_enabled:
+        # Opt-out (#935): the caller has told us this user disabled
+        # AI-driven nudges/insights. Refuse to spend any tokens generating
+        # content for them, independent of whether the caller already
+        # skipped calling us for the same reason.
+        return CoachingResponse(
+            progress_assessment="",
+            deposit_schedule=[],
+            nudges=[],
+            confidence="low",
+        )
 
     goal = request.goal
     portfolio = request.portfolio
