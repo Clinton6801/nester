@@ -30,7 +30,19 @@ var (
 	// or below MinTargetAmount (#692). Defined here so handlers don't have to
 	// import the vault domain to classify amount validation failures.
 	ErrInvalidAmount = errors.New("invalid target amount")
+	// ErrGoalNotDeleted is returned by Restore when the goal has no deleted_at
+	// set (#924): nothing to restore.
+	ErrGoalNotDeleted = errors.New("savings goal is not deleted")
+	// ErrRecoveryWindowExpired is returned by Restore when the goal was
+	// deleted more than SavingsGoalRecoveryWindow ago (#924): it may already
+	// have been (or is about to be) permanently purged.
+	ErrRecoveryWindowExpired = errors.New("savings goal recovery window has expired")
 )
+
+// SavingsGoalRecoveryWindow is how long a soft-deleted savings goal (#924)
+// remains restorable via POST /savings-goals/{id}/restore before the
+// scheduled purge job (see internal/scheduler) hard-deletes it permanently.
+const SavingsGoalRecoveryWindow = 30 * 24 * time.Hour
 
 // MinTargetAmount is the smallest meaningful goal target (#692). Values above
 // zero but below this (e.g. 0.000000001) are rejected as no-op goals.
@@ -163,11 +175,11 @@ func isEmojiRange(r rune) bool {
 		(r >= 0x1F900 && r <= 0x1F9FF) || // supplemental symbols
 		(r >= 0x1FA00 && r <= 0x1FA6F) || // chess symbols
 		(r >= 0x1FA70 && r <= 0x1FAFF) || // symbols and pictographs extended
-		(r >= 0x2600 && r <= 0x26FF) ||   // misc symbols
-		(r >= 0x2700 && r <= 0x27BF) ||   // dingbats
-		r == 0xFE0F ||                     // variation selector-16
+		(r >= 0x2600 && r <= 0x26FF) || // misc symbols
+		(r >= 0x2700 && r <= 0x27BF) || // dingbats
+		r == 0xFE0F || // variation selector-16
 		(r >= 0x1F1E0 && r <= 0x1F1FF) || // flags
-		(r >= 0x200D && r <= 0x200D)       // zero-width joiner
+		(r >= 0x200D && r <= 0x200D) // zero-width joiner
 }
 
 func ParseCategory(value string) (GoalCategory, error) {
@@ -188,18 +200,18 @@ func ParseCategory(value string) (GoalCategory, error) {
 }
 
 type SavingsGoal struct {
-	ID            uuid.UUID       `json:"id"`
-	UserID        uuid.UUID       `json:"user_id"`
-	VaultID       *uuid.UUID      `json:"vault_id,omitempty"`
-	TargetAmount  decimal.Decimal `json:"target_amount"`
-	Currency      string          `json:"currency"`
-	Deadline      time.Time       `json:"deadline"`
-	Description   string          `json:"description,omitempty"`
+	ID           uuid.UUID       `json:"id"`
+	UserID       uuid.UUID       `json:"user_id"`
+	VaultID      *uuid.UUID      `json:"vault_id,omitempty"`
+	TargetAmount decimal.Decimal `json:"target_amount"`
+	Currency     string          `json:"currency"`
+	Deadline     time.Time       `json:"deadline"`
+	Description  string          `json:"description,omitempty"`
 	// Name is a user-supplied display label (#738). Defaults to first 50 chars of Description.
-	Name  string `json:"name,omitempty"`
+	Name string `json:"name,omitempty"`
 	// Emoji is a single Unicode emoji icon (#738).
-	Emoji string `json:"emoji,omitempty"`
-	Category      GoalCategory    `json:"category"`
+	Emoji    string       `json:"emoji,omitempty"`
+	Category GoalCategory `json:"category"`
 	// Icon is an optional icon identifier (e.g. lucide icon name) displayed in the UI.
 	// When blank the UI falls back to the category default via DefaultIconForCategory.
 	Icon string `json:"icon,omitempty"`
@@ -207,42 +219,47 @@ type SavingsGoal struct {
 	// When blank the UI falls back to the category default.
 	Color string `json:"color,omitempty"`
 	// Status is one of "active", "paused", "completed" (#718, #716).
-	Status             string          `json:"status"`
-	CurrentAmount      decimal.Decimal `json:"current_amount"`
-	ProgressPct        float64         `json:"progress_pct"`
-	NotifiedMilestones []int           `json:"-"`
-	DeadlineRemindersSent []int        `json:"-"`
-	CreatedAt          time.Time       `json:"created_at"`
-	UpdatedAt          time.Time       `json:"updated_at"`
+	Status                string          `json:"status"`
+	CurrentAmount         decimal.Decimal `json:"current_amount"`
+	ProgressPct           float64         `json:"progress_pct"`
+	NotifiedMilestones    []int           `json:"-"`
+	DeadlineRemindersSent []int           `json:"-"`
+	CreatedAt             time.Time       `json:"created_at"`
+	UpdatedAt             time.Time       `json:"updated_at"`
 	// Completion fields (#716).
-	CompletedAt     *time.Time `json:"completed_at,omitempty"`
-	CompletionAction string    `json:"completion_action,omitempty"`
+	CompletedAt      *time.Time `json:"completed_at,omitempty"`
+	CompletionAction string     `json:"completion_action,omitempty"`
 	// Velocity stats (#714).
-	AvgWeeklyDeposit       decimal.Decimal `json:"avg_weekly_deposit"`
+	AvgWeeklyDeposit        decimal.Decimal `json:"avg_weekly_deposit"`
 	ProjectedDaysToComplete *int            `json:"projected_days_to_completion,omitempty"`
-	OnTrack                bool            `json:"on_track"`
+	OnTrack                 bool            `json:"on_track"`
 	// Sharing fields.
-	ShareToken      *uuid.UUID `json:"share_token,omitempty"`
-	ShareEnabledAt  *time.Time `json:"share_enabled_at,omitempty"`
-	IsShared        bool       `json:"is_shared"`
+	ShareToken     *uuid.UUID `json:"share_token,omitempty"`
+	ShareEnabledAt *time.Time `json:"share_enabled_at,omitempty"`
+	IsShared       bool       `json:"is_shared"`
 	// On-chain linkage (#807). OnchainGoalID is nil until asynchronous
 	// registration against the savings_goal contract succeeds.
-	OnchainGoalID  *string `json:"onchain_goal_id,omitempty"`
-	OnchainStatus  *string `json:"onchain_status,omitempty"`
+	OnchainGoalID *string `json:"onchain_goal_id,omitempty"`
+	OnchainStatus *string `json:"onchain_status,omitempty"`
+	// DeletedAt is set when the user deletes the goal (#924). The goal is
+	// hidden from all normal reads while set, but remains restorable via
+	// Restore until SavingsGoalRecoveryWindow elapses, after which the
+	// scheduled purge job hard-deletes it.
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
 // SharedGoalView is the read-only public projection of a savings goal exposed
 // via the unauthenticated share link. It deliberately omits user PII.
 type SharedGoalView struct {
-	Name        string          `json:"name"`
-	Emoji       string          `json:"emoji,omitempty"`
-	TargetAmount decimal.Decimal `json:"target_amount"`
-	Currency    string          `json:"currency"`
+	Name          string          `json:"name"`
+	Emoji         string          `json:"emoji,omitempty"`
+	TargetAmount  decimal.Decimal `json:"target_amount"`
+	Currency      string          `json:"currency"`
 	CurrentAmount decimal.Decimal `json:"current_amount"`
-	ProgressPct float64         `json:"progress_pct"`
-	Deadline    time.Time       `json:"deadline"`
-	Category    GoalCategory    `json:"category"`
-	Status      string          `json:"status"`
+	ProgressPct   float64         `json:"progress_pct"`
+	Deadline      time.Time       `json:"deadline"`
+	Category      GoalCategory    `json:"category"`
+	Status        string          `json:"status"`
 }
 
 // GoalDeposit records a single allocation in a multi-goal deposit split (#719).
@@ -295,6 +312,20 @@ type Repository interface {
 	// UpdateOnchainLink persists the result of asynchronously registering the
 	// goal against the savings_goal contract (#807).
 	UpdateOnchainLink(ctx context.Context, goalID uuid.UUID, onchainGoalID, onchainStatus string) error
+	// Restore clears deleted_at, undoing a soft delete (#924). Returns
+	// ErrGoalNotFound if no matching row exists for id/userID at all (deleted
+	// or not); callers should have already validated the recovery window.
+	Restore(ctx context.Context, id, userID uuid.UUID) error
+	// GetByIDIncludingDeleted looks up a goal by ID regardless of its
+	// deleted_at value (#924), so Restore can check the recovery window
+	// against a goal GetByID would otherwise filter out.
+	GetByIDIncludingDeleted(ctx context.Context, id uuid.UUID) (*SavingsGoal, error)
+	// ListDeletedOlderThan returns soft-deleted goals whose deleted_at is
+	// older than cutoff (#924), for the scheduled hard-delete purge job.
+	ListDeletedOlderThan(ctx context.Context, cutoff time.Time) ([]SavingsGoal, error)
+	// HardDelete permanently removes a goal row (#924). Used only by the
+	// recovery-window purge job, never from a user-facing request path.
+	HardDelete(ctx context.Context, id uuid.UUID) error
 }
 
 // categoryIconDefaults maps each GoalCategory to a default icon name and color
