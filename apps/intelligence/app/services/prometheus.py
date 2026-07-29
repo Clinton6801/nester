@@ -12,7 +12,9 @@ import anthropic
 
 from app.config import settings
 from app.models.coaching import CoachingRequest, CoachingResponse
+from app.models.explainability import DocumentUsed, ExplainabilityTrace, ToolInvocation
 from app.models.nudge import NudgeCopyResponse
+from app.models.preferences import ResponsePreferences
 from app.models.portfolio import (
     AllocationItem,
     PortfolioAnalysisResponse,
@@ -26,11 +28,12 @@ from app.models.recommendation import (
     VaultRecommendationResponse,
 )
 from app.services import guardrails
+from app.services.claude import apply_tone_preferences
 from app.services.coingecko import get_client as get_coingecko_client
 from app.services.conversation_store import store as conversation_store
 from app.services.defillama import get_client as get_defillama_client
 from app.services.grounding import build_grounded_system_prompt, validate_grounding
-from app.services.retrieval import RetrievalService
+from app.services.retrieval import RetrievalService, RetrievedContext
 from app.services.retrieval_source import ApiDataSource
 from app.services.vault_context import VaultContextFetcher
 
@@ -318,8 +321,45 @@ def _to_anthropic_messages(
 # ---------------------------------------------------------------------------
 
 
+def build_explainability_trace(
+    retrieved: RetrievedContext,
+    tool_invocations: list[ToolInvocation],
+) -> ExplainabilityTrace:
+    """Build a structured explanation of what informed a chat response (#925).
+
+    `retrieved` supplies the retrieval citations (documents used); recording
+    them here, rather than re-deriving them, keeps the trace consistent with
+    what actually grounded the answer per `grounding.build_grounded_system_prompt`.
+    `tool_invocations` is the ordered list of tool calls made this turn.
+    """
+    documents_used = [
+        DocumentUsed(source=c.source, detail=c.detail) for c in retrieved.citations
+    ]
+
+    if documents_used:
+        reasoning_summary = "Answer grounded in: " + "; ".join(
+            f"{d.source} ({d.detail})" for d in documents_used
+        )
+    else:
+        reasoning_summary = "No user-scoped data was retrieved for this query."
+
+    if tool_invocations:
+        reasoning_summary += " Tools used: " + ", ".join(
+            f"{t.tool_name} ({t.status})" for t in tool_invocations
+        )
+
+    return ExplainabilityTrace(
+        documents_used=documents_used,
+        tools_invoked=tool_invocations,
+        reasoning_summary=reasoning_summary,
+    )
+
+
 async def stream_chat(
-    user_id: str, message: str, request_id: str = ""
+    user_id: str,
+    message: str,
+    request_id: str = "",
+    preferences: ResponsePreferences | None = None,
 ) -> AsyncIterator[str]:
     """Yield SSE-formatted data strings for a streaming Claude response.
 
@@ -354,6 +394,14 @@ async def stream_chat(
     retrieval_service = get_retrieval_service()
     retrieved = await retrieval_service.retrieve(user_id, message)
     dynamic_system_prompt = build_grounded_system_prompt(SYSTEM_PROMPT, retrieved)
+    # Per-user tone/length preference (#927): rewords the same grounded facts
+    # to match the user's saved taste, without altering the persona, scope,
+    # or grounding rules above.
+    dynamic_system_prompt = apply_tone_preferences(dynamic_system_prompt, preferences)
+
+    # Explainability trace (#925): built alongside the response so a user or
+    # auditor can see what informed it, independent of whether tools are used.
+    tool_invocations: list[ToolInvocation] = []
 
     messages: list[anthropic.types.MessageParam] = (
         _to_anthropic_messages(history)
@@ -512,6 +560,13 @@ async def stream_chat(
                                         status="executed",
                                         result=res,
                                     )
+                                    tool_invocations.append(
+                                        ToolInvocation(
+                                            tool_name=tool.name,
+                                            arguments=args.model_dump(mode="json"),
+                                            status="executed",
+                                        )
+                                    )
                                     wrapped = guardrails.wrap_context_block(
                                         f"{tool.name}_result", json.dumps(res)
                                     )
@@ -530,6 +585,13 @@ async def stream_chat(
                                         consequential=False,
                                         status="failed",
                                         error_message=str(e),
+                                    )
+                                    tool_invocations.append(
+                                        ToolInvocation(
+                                            tool_name=tool.name,
+                                            arguments=args.model_dump(mode="json"),
+                                            status="failed",
+                                        )
                                     )
                                     tool_results.append({
                                         "type": "tool_result",
@@ -567,6 +629,13 @@ async def stream_chat(
                                     consequential=True,
                                     status="proposed",
                                 )
+                                tool_invocations.append(
+                                    ToolInvocation(
+                                        tool_name=tool.name,
+                                        arguments=args.model_dump(mode="json"),
+                                        status="proposed",
+                                    )
+                                )
 
                                 r = _get_redis()
                                 if r:
@@ -582,6 +651,10 @@ async def stream_chat(
                                 }
                                 pending_payload = json.dumps(pending_evt)
                                 yield f"event: pending_confirmation\ndata: {pending_payload}\n\n"
+                                trace = build_explainability_trace(retrieved, tool_invocations)
+                                yield (
+                                    f"event: explainability\ndata: {trace.model_dump_json()}\n\n"
+                                )
                                 yield "data: [DONE]\n\n"
                                 return
 
@@ -607,6 +680,8 @@ async def stream_chat(
                             user_id,
                             unsupported,
                         )
+                    trace = build_explainability_trace(retrieved, tool_invocations)
+                    yield f"event: explainability\ndata: {trace.model_dump_json()}\n\n"
                     yield "data: [DONE]\n\n"
                     return
 
