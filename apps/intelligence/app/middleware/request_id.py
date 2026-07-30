@@ -17,14 +17,13 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable
 
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
-
 # ---------------------------------------------------------------------------
 # Context variable — readable anywhere inside the async call-chain.
 # ---------------------------------------------------------------------------
-
 from contextvars import ContextVar
+
+from fastapi import Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="")
 
