@@ -750,6 +750,7 @@ dependencies = [
  "nester-access-control",
  "nester-common",
  "nester-test-utils",
+ "proptest",
  "soroban-sdk",
  "treasury-contract",
  "vault-contract",
