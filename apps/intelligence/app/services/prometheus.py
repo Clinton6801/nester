@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional, cast
 
@@ -379,7 +379,7 @@ async def stream_chat(
     request_id: str = "",
     preferences: ResponsePreferences | None = None,
     language: str | None = None,
-) -> AsyncIterator[str]:
+) -> AsyncGenerator[str, None]:
     """Yield SSE-formatted data strings for a streaming Claude response.
 
     Each yielded string is formatted as `data: <text>\\n\\n`.
@@ -580,7 +580,7 @@ async def stream_chat(
                                 continue
 
                             try:
-                                args = tool.args_model(**block.input)
+                                args = tool.args_model(**cast(dict[str, Any], block.input))
                             except ValidationError as e:
                                 await _audit(
                                     user_id=user_id,
