@@ -71,6 +71,9 @@ func ApplyAllMigrations(t *testing.T, db *sql.DB, migrationsDir string) {
 	}
 
 	for _, name := range names {
+		// #nosec G304 -- test-only helper. migrationsDir is a path supplied by
+		// the test itself, and name comes from the directory listing above,
+		// filtered to *.up.sql. Neither is reachable from user input.
 		contents, err := os.ReadFile(filepath.Join(migrationsDir, name))
 		if err != nil {
 			t.Fatalf("read migration %q: %v", name, err)

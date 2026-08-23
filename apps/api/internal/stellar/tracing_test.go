@@ -195,7 +195,7 @@ func TestInvokeVoidFunctionSpanAttributes(t *testing.T) {
 		t.Error("no span for sendTransaction")
 	}
 
-	assertNoSecretsInSpans(t, spans, operatorSecret, invoker.kp.Address())
+	assertNoSecretsInSpans(t, spans, operatorSecret, invoker.operatorAddress)
 }
 
 // The contract-level span must carry the low-cardinality metadata an operator
@@ -239,7 +239,7 @@ func TestSimulateVoidFunctionRecordsContractMetadata(t *testing.T) {
 		t.Errorf("%s = %q, want %q", attrFunction, got, testFunction)
 	}
 
-	assertNoSecretsInSpans(t, spans, operatorSecret, invoker.kp.Address())
+	assertNoSecretsInSpans(t, spans, operatorSecret, invoker.operatorAddress)
 }
 
 // An RPC failure must mark the span errored and retained, without the error
@@ -285,7 +285,7 @@ func TestRPCFailureIsRecordedWithoutSecrets(t *testing.T) {
 		t.Error("failed Soroban call was not marked for retention")
 	}
 
-	assertNoSecretsInSpans(t, spans, operatorSecret, invoker.kp.Address())
+	assertNoSecretsInSpans(t, spans, operatorSecret, invoker.operatorAddress)
 }
 
 // recordTxHash is exercised directly, since the submit-only path above never
