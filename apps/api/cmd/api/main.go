@@ -22,6 +22,7 @@ import (
 	migratedb "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/suncrestlabs/nester/apps/api/internal/auth"
+	"github.com/suncrestlabs/nester/apps/api/internal/cache"
 	"github.com/suncrestlabs/nester/apps/api/internal/config"
 	cryptopkg "github.com/suncrestlabs/nester/apps/api/internal/crypto"
 	"github.com/suncrestlabs/nester/apps/api/internal/domain/jobqueue"
@@ -42,6 +43,7 @@ import (
 	tvlsvc "github.com/suncrestlabs/nester/apps/api/internal/service/tvl"
 	"github.com/suncrestlabs/nester/apps/api/internal/services"
 	stellarpkg "github.com/suncrestlabs/nester/apps/api/internal/stellar"
+	"github.com/suncrestlabs/nester/apps/api/internal/telemetry"
 	"github.com/suncrestlabs/nester/apps/api/internal/valuation"
 	"github.com/suncrestlabs/nester/apps/api/internal/ws"
 	logpkg "github.com/suncrestlabs/nester/apps/api/pkg/logger"
@@ -53,6 +55,29 @@ func main() {
 	if err := run(); err != nil {
 		os.Stderr.WriteString(err.Error() + "\n")
 		os.Exit(1)
+	}
+}
+
+// stellarNetworkLabel maps a Stellar network passphrase to a short, stable
+// label for logs. The passphrase is a public chain identifier rather than a
+// credential, but logging it verbatim trips go/clear-text-logging because of
+// the name, and the label is the more useful thing to read in a startup line
+// anyway. An unrecognised network is reported as "custom" so a misconfigured
+// passphrase is never echoed into the log.
+func stellarNetworkLabel(passphrase string) string {
+	switch passphrase {
+	case "Public Global Stellar Network ; September 2015":
+		return "pubnet"
+	case "Test SDF Network ; September 2015":
+		return "testnet"
+	case "Test SDF Future Network ; October 2022":
+		return "futurenet"
+	case "Standalone Network ; February 2017":
+		return "standalone"
+	case "":
+		return "unset"
+	default:
+		return "custom"
 	}
 }
 
@@ -76,7 +101,45 @@ func run() error {
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pgPool, err := repository.NewPostgresDB(cfg.Database())
+	// Distributed tracing (#1054). Installed before any dependency is opened
+	// so the pool, cache and HTTP clients below are all created against a
+	// configured provider. Disabled by default: Init then installs a no-op
+	// provider, dials no collector, and every instrumentation call site
+	// becomes a cheap no-op.
+	tracingCfg := cfg.Tracing()
+	_, shutdownTracing, err := telemetry.Init(shutdownCtx, telemetry.Config{
+		Enabled:          tracingCfg.Enabled(),
+		Endpoint:         tracingCfg.OTLPEndpoint(),
+		Insecure:         tracingCfg.OTLPInsecure(),
+		ServiceName:      tracingCfg.ServiceName(),
+		ServiceVersion:   version,
+		Environment:      cfg.Environment(),
+		ExporterTimeout:  tracingCfg.ExporterTimeout(),
+		SampleRatio:      tracingCfg.SampleRatio(),
+		LatencyThreshold: tracingCfg.LatencyThreshold(),
+	}, baseLogger)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		// Bounded independently of shutdownCtx, which is already cancelled by
+		// the time this runs; without a fresh context the final flush would
+		// abort and drop the spans from the shutdown itself.
+		flushCtx, cancelFlush := context.WithTimeout(context.Background(), tracingCfg.ExporterTimeout())
+		defer cancelFlush()
+		if err := shutdownTracing(flushCtx); err != nil {
+			baseLogger.Warn("tracing shutdown reported an error", "error", err)
+		}
+	}()
+
+	// The traced pool is chosen up front so every repository built from it
+	// emits query spans; NewPostgresDB remains the untraced default.
+	newPool := repository.NewPostgresDB
+	if tracingCfg.Enabled() {
+		newPool = repository.NewPostgresDBTraced
+	}
+
+	pgPool, err := newPool(cfg.Database())
 	if err != nil {
 		return err
 	}
@@ -254,6 +317,8 @@ func run() error {
 	var redisClient *redis.Client
 	if addr := cfg.Redis().Addr(); addr != "" {
 		redisClient = redis.NewClient(&redis.Options{Addr: addr})
+		// Command-name-only spans; keys and values are never recorded.
+		redisClient = cache.InstrumentRedis(redisClient, cfg.Tracing().Enabled())
 	}
 
 	// Metrics are constructed once, here, and threaded to each
@@ -1160,7 +1225,12 @@ func run() error {
 											settlementLimiter(
 												walletLimiter(
 													middleware.LimitRequestBody(1 * 1024 * 1024)(
-														middleware.Logging(baseLogger)(mux),
+														middleware.Logging(baseLogger)(
+															middleware.Tracing(
+																cfg.Tracing().ServiceName(),
+																cfg.Tracing().LatencyThreshold(),
+															)(mux),
+														),
 													),
 												),
 											),
@@ -1186,7 +1256,7 @@ func run() error {
 		"version", version,
 		"horizon_url", cfg.Stellar().HorizonURL(),
 		"rpc_url", cfg.Stellar().RPCURL(),
-		"network_passphrase", cfg.Stellar().NetworkPassphrase(),
+		"network", stellarNetworkLabel(cfg.Stellar().NetworkPassphrase()),
 		"auto_migrate", cfg.Startup().EnableAutoMigrate(),
 	)
 
