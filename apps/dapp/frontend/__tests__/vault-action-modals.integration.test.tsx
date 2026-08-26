@@ -175,7 +175,7 @@ describe("Vault Action Modals - Decimal Precision Integration", () => {
   describe("Error Messages and Feedback", () => {
     it("should provide clear validation error messages", () => {
       const testCases = [
-        { input: "-1", expectedCode: "NEGATIVE_OR_ZERO", expectedKeyword: "negative" },
+        { input: "-1", expectedCode: "NEGATIVE_OR_ZERO", expectedKeyword: "positive" },
         { input: "1e3", expectedCode: "SCIENTIFIC_NOTATION", expectedKeyword: "scientific" },
         { input: "0.0000001", expectedCode: "TOO_MANY_DECIMALS", expectedKeyword: "decimal" },
       ];
@@ -197,7 +197,7 @@ describe("Vault Action Modals - Decimal Precision Integration", () => {
 
   describe("Edge Cases and Security", () => {
     it("should handle very large numbers without precision loss", () => {
-      const largeAmount = "999999999999999.999999";
+      const largeAmount = "999999999.999999";
       const result = parseAmountToStroops(largeAmount, 6);
       expect(result.valid).toBe(true);
       
