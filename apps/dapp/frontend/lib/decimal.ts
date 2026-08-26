@@ -145,14 +145,20 @@ export function parseAmountToStroops(
     return {
       valid: true,
       stroops,
-      error: null,
     };
   } catch (err) {
     // Catch any exceptions from parseDecimalStrict or Decimal.js
     const message = err instanceof Error ? err.message : String(err);
 
     // Classify the error
-    let code: ParseResult["error"]["code"] = "INVALID_FORMAT";
+    type ErrorCode =
+      | "INVALID_FORMAT"
+      | "NEGATIVE_OR_ZERO"
+      | "SCIENTIFIC_NOTATION"
+      | "TOO_MANY_DECIMALS"
+      | "INSUFFICIENT_BALANCE";
+
+    let code: ErrorCode = "INVALID_FORMAT";
     if (message.includes("Scientific")) {
       code = "SCIENTIFIC_NOTATION";
     }

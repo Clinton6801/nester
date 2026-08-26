@@ -23,6 +23,7 @@ describe("Decimal Amount Parsing", () => {
         const result = parseAmountToStroops(input as string, decimals as number);
         expect(result.valid).toBe(true);
         expect(result.stroops).toEqual(expected);
+        expect(result.error).toBeUndefined();
       });
     });
   });

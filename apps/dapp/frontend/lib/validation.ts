@@ -55,34 +55,17 @@ export const validateAmount = (options?: {
     .min(1, { message: "Amount is required" })
     // Use precise decimal parsing instead of Number()
     .refine(
-      (val) => {
+      (val: string) => {
         const result = parseAmountToStroops(val, maxDecimals);
         return result.valid;
       },
-      (val) => {
-        const result = parseAmountToStroops(val, maxDecimals);
-        if (!result.valid) {
-          // Return error message based on error code
-          const errorMessages: Record<string, string> = {
-            INVALID_FORMAT: "Invalid amount format",
-            NEGATIVE_OR_ZERO: "Amount must be greater than zero",
-            SCIENTIFIC_NOTATION: "Scientific notation is not allowed",
-            TOO_MANY_DECIMALS: `Maximum ${maxDecimals} decimal places allowed`,
-            INSUFFICIENT_BALANCE: balanceMessage || `Amount exceeds your balance`,
-          };
-          return {
-            message:
-              errorMessages[result.error?.code || ""] ||
-              result.error?.message ||
-              "Invalid amount",
-          };
-        }
-        return { message: "Invalid amount" };
+      {
+        message: "Invalid amount",
       }
     )
     // Additional check: respect minimum amount (after decimal parsing validates format)
     .refine(
-      (val) => {
+      (val: string) => {
         if (min <= 0) return true;
         const result = parseAmountToStroops(val, maxDecimals);
         if (!result.valid) return true; // Let the previous check handle this
@@ -93,7 +76,7 @@ export const validateAmount = (options?: {
     )
     // Check: respect maximum amount
     .refine(
-      (val) => {
+      (val: string) => {
         if (max === undefined) return true;
         const result = parseAmountToStroops(val, maxDecimals);
         if (!result.valid) return true;
@@ -104,7 +87,7 @@ export const validateAmount = (options?: {
     )
     // Check: respect balance
     .refine(
-      (val) => {
+      (val: string) => {
         if (balance === undefined || balance <= 0) return true;
         const validation = isValidAmountInput(val, maxDecimals, balance);
         return validation.valid;
