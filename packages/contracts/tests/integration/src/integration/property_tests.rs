@@ -311,8 +311,12 @@ proptest! {
                     // rejects it, establish the resulting price as the new base.
                     if h.token().total_supply() > 0 {
                         h.vault().report_yield(&h.admin, &(-amount));
-                        prev_price = h.vault().share_price();
                     }
+                    // Rebase unconditionally. At zero supply share_price()
+                    // returns its 1.0 bootstrap value, so leaving prev_price
+                    // at a pre-loss figure would make the next deposit look
+                    // like a decrease that no operation actually caused.
+                    prev_price = h.vault().share_price();
                 }
             }
         }
