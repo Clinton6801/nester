@@ -44,9 +44,32 @@ vi.mock("@stellar/stellar-sdk", () => {
   AddressMock.fromScVal = vi.fn();
   AddressMock.prototype.toScVal = vi.fn().mockReturnValue({ type: "address" });
   
+  const ContractMock = vi.fn(function(contractId: string) {
+    this.contractId = contractId;
+  });
+  ContractMock.prototype.call = vi.fn().mockReturnValue({
+    toXDR: vi.fn().mockReturnValue("operation_xdr"),
+  });
+  
+  const TransactionBuilderMock = vi.fn(function(account, options) {
+    this.account = account;
+    this.options = options;
+  });
+  TransactionBuilderMock.prototype.addOperation = vi.fn(function() {
+    return this;
+  });
+  TransactionBuilderMock.prototype.setTimeout = vi.fn(function() {
+    return this;
+  });
+  TransactionBuilderMock.prototype.build = vi.fn(function() {
+    return {
+      toXDR: vi.fn().mockReturnValue("transaction_xdr"),
+    };
+  });
+  
   return {
-    Contract: vi.fn(),
-    TransactionBuilder: vi.fn(),
+    Contract: ContractMock,
+    TransactionBuilder: TransactionBuilderMock,
     Transaction: vi.fn(),
     Address: AddressMock,
     BASE_FEE: "100",
@@ -80,7 +103,7 @@ describe("vault-factory", () => {
     vi.clearAllMocks();
     // Reset environment variables BEFORE importing
     process.env.NEXT_PUBLIC_VAULT_FACTORY_CONTRACT_ID =
-      "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF";
+      "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGFA";
     process.env.NEXT_PUBLIC_STELLAR_RPC_URL =
       "https://soroban-testnet.stellar.org";
     process.env.NEXT_PUBLIC_NETWORK = "testnet";
@@ -224,7 +247,7 @@ describe("vault-factory", () => {
 
     it("should return real contractAddress from transaction result", async () => {
       const expectedContractAddress =
-        "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF";
+        "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGFA";
 
       const mockServer = {
         getAccount: vi.fn().mockResolvedValue({
@@ -311,7 +334,7 @@ describe("vault-factory", () => {
       } as any);
 
       const realContractAddress =
-        "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF";
+        "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGFA";
 
       const mockAddressInstance = {
         toString: vi.fn().mockReturnValue(realContractAddress),
@@ -373,7 +396,7 @@ describe("vault-factory", () => {
       } as any);
 
       const mockAddressInstance = {
-        toString: vi.fn().mockReturnValue("CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF"),
+        toString: vi.fn().mockReturnValue("CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGFA"),
       };
       vi.mocked(StellarSdk.Address.fromScVal).mockReturnValue(
         mockAddressInstance as any
@@ -434,7 +457,7 @@ describe("vault-factory", () => {
       } as any);
 
       const mockAddressInstance = {
-        toString: vi.fn().mockReturnValue("CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF"),
+        toString: vi.fn().mockReturnValue("CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGFA"),
       };
       vi.mocked(StellarSdk.Address.fromScVal).mockReturnValue(
         mockAddressInstance as any
@@ -548,7 +571,7 @@ describe("vault-factory", () => {
       } as any);
 
       const mockAddressInstance = {
-        toString: vi.fn().mockReturnValue("CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF"),
+        toString: vi.fn().mockReturnValue("CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGFA"),
       };
       vi.mocked(StellarSdk.Address.fromScVal).mockReturnValue(
         mockAddressInstance as any
@@ -635,7 +658,7 @@ describe("vault-factory", () => {
       } as any);
 
       const mockAddressInstance = {
-        toString: vi.fn().mockReturnValue("CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF"),
+        toString: vi.fn().mockReturnValue("CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGFA"),
       };
       vi.mocked(StellarSdk.Address.fromScVal).mockReturnValue(
         mockAddressInstance as any
@@ -702,7 +725,7 @@ describe("vault-factory", () => {
       } as any);
 
       const mockAddressInstance = {
-        toString: vi.fn().mockReturnValue("CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF"),
+        toString: vi.fn().mockReturnValue("CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGFA"),
       };
       vi.mocked(StellarSdk.Address.fromScVal).mockReturnValue(
         mockAddressInstance as any
@@ -755,7 +778,7 @@ describe("vault-factory", () => {
     it("should validate Stellar contract address format", () => {
       // Valid 56-character contract addresses (C + 55 alphanumeric)
       const validAddresses = [
-        "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF", // Real example
+        "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGFA", // 56 chars: real example + A
         "C" + "A".repeat(55), // All uppercase letters
         "C" + "0".repeat(55), // All digits
       ];
