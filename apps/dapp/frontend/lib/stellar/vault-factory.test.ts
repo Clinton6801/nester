@@ -37,28 +37,34 @@ vi.mock("@/lib/networks", () => ({
 }));
 
 // Mock the stellar-sdk module BEFORE importing vault-factory
-vi.mock("@stellar/stellar-sdk", () => ({
-  Contract: vi.fn(),
-  TransactionBuilder: vi.fn(),
-  Transaction: vi.fn(),
-  Address: {
-    fromScVal: vi.fn(),
-  },
-  BASE_FEE: "100",
-  nativeToScVal: vi.fn(),
-  rpc: {
-    Server: vi.fn(),
-    Api: {
-      isSimulationError: vi.fn(),
-      GetTransactionStatus: {
-        SUCCESS: "SUCCESS",
-        FAILED: "FAILED",
-        NOT_FOUND: "NOT_FOUND",
+vi.mock("@stellar/stellar-sdk", () => {
+  const AddressMock = vi.fn(function(address: string) {
+    this.address = address;
+  });
+  AddressMock.fromScVal = vi.fn();
+  AddressMock.prototype.toScVal = vi.fn().mockReturnValue({ type: "address" });
+  
+  return {
+    Contract: vi.fn(),
+    TransactionBuilder: vi.fn(),
+    Transaction: vi.fn(),
+    Address: AddressMock,
+    BASE_FEE: "100",
+    nativeToScVal: vi.fn(),
+    rpc: {
+      Server: vi.fn(),
+      Api: {
+        isSimulationError: vi.fn(),
+        GetTransactionStatus: {
+          SUCCESS: "SUCCESS",
+          FAILED: "FAILED",
+          NOT_FOUND: "NOT_FOUND",
+        },
+        assembleTransaction: vi.fn(),
       },
-      assembleTransaction: vi.fn(),
     },
-  },
-}));
+  };
+});
 
 // Import AFTER mocking
 import {
@@ -747,21 +753,23 @@ describe("vault-factory", () => {
 
   describe("Format validation", () => {
     it("should validate Stellar contract address format", () => {
+      // Valid 56-character contract addresses (C + 55 alphanumeric)
       const validAddresses = [
-        "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF",
-        "C" + "0".repeat(55),
+        "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF", // Real example
+        "C" + "A".repeat(55), // All uppercase letters
+        "C" + "0".repeat(55), // All digits
       ];
 
       const invalidAddresses = [
-        "GAAA", // Account address
-        "C" + "0".repeat(54), // Too short (only 55 total)
-        "C" + "0".repeat(56), // Too long (57 total)
+        "GAAA", // Account address (wrong prefix)
+        "C" + "0".repeat(54), // Too short (55 total, need 56)
+        "C" + "0".repeat(56), // Too long (57 total, need 56)
         "D" + "A".repeat(55), // Wrong prefix
       ];
 
       validAddresses.forEach((addr) => {
-        expect(addr).toMatch(/^C[A-Z0-9]{55}$/);
         expect(addr.length).toBe(56);
+        expect(addr).toMatch(/^C[A-Z0-9]{55}$/);
       });
 
       invalidAddresses.forEach((addr) => {
