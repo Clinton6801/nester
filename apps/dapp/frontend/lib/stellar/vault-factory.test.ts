@@ -72,7 +72,7 @@ describe("vault-factory", () => {
   beforeEach(() => {
     // Clear all mocks before each test
     vi.clearAllMocks();
-    // Reset environment variables
+    // Reset environment variables BEFORE importing
     process.env.NEXT_PUBLIC_VAULT_FACTORY_CONTRACT_ID =
       "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF";
     process.env.NEXT_PUBLIC_STELLAR_RPC_URL =
@@ -749,18 +749,19 @@ describe("vault-factory", () => {
     it("should validate Stellar contract address format", () => {
       const validAddresses = [
         "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF",
-        "C000000000000000000000000000000000000000000000000000000000",
+        "C" + "0".repeat(55),
       ];
 
       const invalidAddresses = [
         "GAAA", // Account address
-        "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKG", // Too short
-        "CCJAJVEFZPGIGMYIBQO4U7VL2PGEQR2XGVQ4YFQUHK37IJDJWEXHKGF00", // Too long
-        "DAAA" + "A".repeat(52), // Wrong prefix
+        "C" + "0".repeat(54), // Too short (only 55 total)
+        "C" + "0".repeat(56), // Too long (57 total)
+        "D" + "A".repeat(55), // Wrong prefix
       ];
 
       validAddresses.forEach((addr) => {
         expect(addr).toMatch(/^C[A-Z0-9]{55}$/);
+        expect(addr.length).toBe(56);
       });
 
       invalidAddresses.forEach((addr) => {

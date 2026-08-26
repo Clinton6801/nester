@@ -10,9 +10,6 @@ import {
 
 import { NETWORKS, DEFAULT_NETWORK } from "@/lib/networks";
 
-const FACTORY_CONTRACT_ID =
-  process.env.NEXT_PUBLIC_VAULT_FACTORY_CONTRACT_ID;
-
 const getCurrentNetwork = () => {
   if (typeof window !== "undefined") {
     const savedNetwork = process.env.NEXT_PUBLIC_NETWORK;
@@ -22,11 +19,6 @@ const getCurrentNetwork = () => {
   }
   return DEFAULT_NETWORK;
 };
-
-const NETWORK = getCurrentNetwork();
-const NETWORK_PASSPHRASE = NETWORK.networkPassphrase;
-const RPC_URL =
-  process.env.NEXT_PUBLIC_STELLAR_RPC_URL || NETWORK.rpcUrl;
 
 export interface CreateVaultParams {
   name: string;
@@ -64,6 +56,14 @@ export interface VaultDeploymentResponse {
 export async function createVault(
   params: CreateVaultParams
 ): Promise<CreateVaultResult> {
+  // Evaluate at runtime so tests can set environment variables
+  const FACTORY_CONTRACT_ID =
+    process.env.NEXT_PUBLIC_VAULT_FACTORY_CONTRACT_ID;
+  const NETWORK = getCurrentNetwork();
+  const NETWORK_PASSPHRASE = NETWORK.networkPassphrase;
+  const RPC_URL =
+    process.env.NEXT_PUBLIC_STELLAR_RPC_URL || NETWORK.rpcUrl;
+
   if (!FACTORY_CONTRACT_ID) {
     throw new Error(
       "NEXT_PUBLIC_VAULT_FACTORY_CONTRACT_ID is not configured"
