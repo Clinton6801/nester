@@ -76,6 +76,11 @@ vi.mock("@stellar/stellar-sdk", () => {
     nativeToScVal: vi.fn(),
     rpc: {
       Server: vi.fn(),
+      assembleTransaction: vi.fn().mockReturnValue({
+        build: vi.fn().mockReturnValue({
+          toXDR: vi.fn().mockReturnValue("assembled_xdr"),
+        }),
+      }),
       Api: {
         isSimulationError: vi.fn(),
         GetTransactionStatus: {
@@ -184,7 +189,7 @@ describe("vault-factory", () => {
       vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -226,7 +231,7 @@ describe("vault-factory", () => {
       vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -273,7 +278,7 @@ describe("vault-factory", () => {
       vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -327,7 +332,7 @@ describe("vault-factory", () => {
       vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -389,7 +394,7 @@ describe("vault-factory", () => {
       vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -450,7 +455,7 @@ describe("vault-factory", () => {
       vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -500,7 +505,7 @@ describe("vault-factory", () => {
       vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -564,7 +569,7 @@ describe("vault-factory", () => {
       vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -651,7 +656,7 @@ describe("vault-factory", () => {
       vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -718,7 +723,7 @@ describe("vault-factory", () => {
       vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
