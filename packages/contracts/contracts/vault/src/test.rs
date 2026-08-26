@@ -278,6 +278,51 @@ fn first_deposit_creates_one_to_one_shares() {
 }
 
 #[test]
+fn direct_donation_cannot_create_first_depositor_profit() {
+    let (env, admin, token, vault, _treasury) = setup();
+    let attacker = Address::generate(&env);
+    let victim = Address::generate(&env);
+    let seed = nester_common::MIN_DEPOSIT_AMOUNT;
+    let donation = 1_000 * XLM;
+    let victim_deposit = 100 * XLM;
+    let token_client = token::Client::new(&env, &token.address);
+
+    // Disable exit fees so the balance comparison isolates donation economics.
+    let mut fee_config = vault.get_fee_config();
+    fee_config.early_withdrawal_fee_bps = 0;
+    vault.set_fee_config(&admin, &fee_config);
+
+    mint(&token, &attacker, seed + donation);
+    mint(&token, &victim, victim_deposit);
+
+    // Reproduce the classic first-depositor sequence: seed at the minimum,
+    // then donate directly to the vault without calling any vault entrypoint.
+    let attacker_shares = vault.deposit(&attacker, &seed, &0);
+    token_client.transfer(&attacker, &vault.address, &donation);
+
+    assert_eq!(token_client.balance(&vault.address), seed + donation);
+    assert_eq!(
+        vault.total_assets(),
+        seed,
+        "raw token donations must not inflate the accounted share price"
+    );
+    assert_eq!(vault.preview_withdraw(&attacker_shares), seed);
+
+    // Outcome: the victim still enters at the unaffected 1:1 exchange rate,
+    // and the attacker cannot redeem either the donation or the victim's funds.
+    let victim_shares = vault.deposit(&victim, &victim_deposit, &0);
+    assert_eq!(victim_shares, victim_deposit);
+    assert_eq!(vault.preview_withdraw(&attacker_shares), seed);
+
+    vault.withdraw(&attacker, &attacker_shares, &0);
+    assert_eq!(
+        token_client.balance(&attacker),
+        seed,
+        "the attack must lose the donation rather than profit from the victim"
+    );
+}
+
+#[test]
 fn subsequent_deposit_uses_current_share_price() {
     let (_env, _admin, token, vault, _treasury) = setup();
 
