@@ -1,37 +1,72 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import * as StellarSdk from "@stellar/stellar-sdk";
+
+// Mock the networks config
+vi.mock("@/lib/networks", () => ({
+  NETWORKS: {
+    testnet: {
+      id: "testnet",
+      name: "Testnet",
+      rpcUrl: "https://soroban-testnet.stellar.org",
+      horizonUrl: "https://horizon-testnet.stellar.org",
+      networkPassphrase: "Test SDF Network ; September 2015",
+      explorerUrl: "https://testnet.stellarchain.io",
+      friendbotUrl: "https://friendbot.stellar.org",
+      contracts: {},
+    },
+    mainnet: {
+      id: "mainnet",
+      name: "Mainnet",
+      rpcUrl: "https://soroban-rpc.mainnet.stellar.org",
+      horizonUrl: "https://horizon.stellar.org",
+      networkPassphrase: "Public Global Stellar Network ; September 2015",
+      explorerUrl: "https://stellarchain.io",
+      contracts: {},
+    },
+  },
+  DEFAULT_NETWORK: {
+    id: "testnet",
+    name: "Testnet",
+    rpcUrl: "https://soroban-testnet.stellar.org",
+    horizonUrl: "https://horizon-testnet.stellar.org",
+    networkPassphrase: "Test SDF Network ; September 2015",
+    explorerUrl: "https://testnet.stellarchain.io",
+    friendbotUrl: "https://friendbot.stellar.org",
+    contracts: {},
+  },
+}));
+
+// Mock the stellar-sdk module BEFORE importing vault-factory
+vi.mock("@stellar/stellar-sdk", () => ({
+  Contract: vi.fn(),
+  TransactionBuilder: vi.fn(),
+  Transaction: vi.fn(),
+  Address: {
+    fromScVal: vi.fn(),
+  },
+  BASE_FEE: "100",
+  nativeToScVal: vi.fn(),
+  rpc: {
+    Server: vi.fn(),
+    Api: {
+      isSimulationError: vi.fn(),
+      GetTransactionStatus: {
+        SUCCESS: "SUCCESS",
+        FAILED: "FAILED",
+        NOT_FOUND: "NOT_FOUND",
+      },
+      assembleTransaction: vi.fn(),
+    },
+  },
+}));
+
+// Import AFTER mocking
 import {
   createVault,
   VaultFactory,
   CreateVaultParams,
   CreateVaultResult,
 } from "./vault-factory";
-import * as StellarSdk from "@stellar/stellar-sdk";
-
-// Mock the stellar-sdk module
-vi.mock("@stellar/stellar-sdk", () => {
-  const actual = vi.importActual("@stellar/stellar-sdk");
-  return {
-    ...actual,
-    SorobanRpc: {
-      ...actual.SorobanRpc,
-      Server: vi.fn(),
-      Api: {
-        ...actual.SorobanRpc.Api,
-        isSimulationError: vi.fn(),
-        GetTransactionStatus: {
-          SUCCESS: "SUCCESS",
-          FAILED: "FAILED",
-          NOT_FOUND: "NOT_FOUND",
-        },
-        assembleTransaction: vi.fn(),
-      },
-    },
-    Contract: vi.fn(),
-    TransactionBuilder: vi.fn(),
-    Transaction: vi.fn(),
-    Address: vi.fn(),
-  };
-});
 
 describe("vault-factory", () => {
   beforeEach(() => {
@@ -79,10 +114,10 @@ describe("vault-factory", () => {
           }),
       };
 
-      vi.mocked(StellarSdk.SorobanRpc.Server).mockImplementation(
+      vi.mocked(StellarSdk.rpc.Server).mockImplementation(
         () => mockServer as any
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.isSimulationError).mockReturnValue(
+      vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         true
       );
 
@@ -114,13 +149,13 @@ describe("vault-factory", () => {
         }),
       };
 
-      vi.mocked(StellarSdk.SorobanRpc.Server).mockImplementation(
+      vi.mocked(StellarSdk.rpc.Server).mockImplementation(
         () => mockServer as any
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.isSimulationError).mockReturnValue(
+      vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -156,13 +191,13 @@ describe("vault-factory", () => {
         }),
       };
 
-      vi.mocked(StellarSdk.SorobanRpc.Server).mockImplementation(
+      vi.mocked(StellarSdk.rpc.Server).mockImplementation(
         () => mockServer as any
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.isSimulationError).mockReturnValue(
+      vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -203,13 +238,13 @@ describe("vault-factory", () => {
         }),
       };
 
-      vi.mocked(StellarSdk.SorobanRpc.Server).mockImplementation(
+      vi.mocked(StellarSdk.rpc.Server).mockImplementation(
         () => mockServer as any
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.isSimulationError).mockReturnValue(
+      vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -257,13 +292,13 @@ describe("vault-factory", () => {
         }),
       };
 
-      vi.mocked(StellarSdk.SorobanRpc.Server).mockImplementation(
+      vi.mocked(StellarSdk.rpc.Server).mockImplementation(
         () => mockServer as any
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.isSimulationError).mockReturnValue(
+      vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -319,13 +354,13 @@ describe("vault-factory", () => {
         }),
       };
 
-      vi.mocked(StellarSdk.SorobanRpc.Server).mockImplementation(
+      vi.mocked(StellarSdk.rpc.Server).mockImplementation(
         () => mockServer as any
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.isSimulationError).mockReturnValue(
+      vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -380,13 +415,13 @@ describe("vault-factory", () => {
         }),
       };
 
-      vi.mocked(StellarSdk.SorobanRpc.Server).mockImplementation(
+      vi.mocked(StellarSdk.rpc.Server).mockImplementation(
         () => mockServer as any
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.isSimulationError).mockReturnValue(
+      vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -430,13 +465,13 @@ describe("vault-factory", () => {
         }),
       };
 
-      vi.mocked(StellarSdk.SorobanRpc.Server).mockImplementation(
+      vi.mocked(StellarSdk.rpc.Server).mockImplementation(
         () => mockServer as any
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.isSimulationError).mockReturnValue(
+      vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -494,13 +529,13 @@ describe("vault-factory", () => {
         }),
       };
 
-      vi.mocked(StellarSdk.SorobanRpc.Server).mockImplementation(
+      vi.mocked(StellarSdk.rpc.Server).mockImplementation(
         () => mockServer as any
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.isSimulationError).mockReturnValue(
+      vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -581,13 +616,13 @@ describe("vault-factory", () => {
         }),
       };
 
-      vi.mocked(StellarSdk.SorobanRpc.Server).mockImplementation(
+      vi.mocked(StellarSdk.rpc.Server).mockImplementation(
         () => mockServer as any
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.isSimulationError).mockReturnValue(
+      vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -648,13 +683,13 @@ describe("vault-factory", () => {
         }),
       };
 
-      vi.mocked(StellarSdk.SorobanRpc.Server).mockImplementation(
+      vi.mocked(StellarSdk.rpc.Server).mockImplementation(
         () => mockServer as any
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.isSimulationError).mockReturnValue(
+      vi.mocked(StellarSdk.rpc.Api.isSimulationError).mockReturnValue(
         false
       );
-      vi.mocked(StellarSdk.SorobanRpc.Api.assembleTransaction).mockReturnValue({
+      vi.mocked(StellarSdk.rpc.Api.assembleTransaction).mockReturnValue({
         build: vi.fn().mockReturnValue({
           toXDR: vi.fn().mockReturnValue("assembled_xdr"),
         }),
@@ -757,3 +792,4 @@ describe("vault-factory", () => {
     });
   });
 });
+
