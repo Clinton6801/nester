@@ -1,8 +1,7 @@
 import { test, expect } from "@playwright/test";
 import {
   Keypair,
-  Networks,
-  SorobanRpc,
+  rpc as SorobanRpc,
   TransactionBuilder,
   BASE_FEE,
   Contract,
@@ -34,7 +33,7 @@ test.describe("Vault Creation E2E", () => {
   const RPC_URL =
     process.env.NEXT_PUBLIC_STELLAR_RPC_URL ||
     "https://soroban-testnet.stellar.org";
-  const NETWORK_PASSPHRASE = Networks.TESTNET_NETWORK_PASSPHRASE;
+  const NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"; // Testnet
   const FACTORY_CONTRACT_ID =
     process.env.NEXT_PUBLIC_VAULT_FACTORY_CONTRACT_ID;
   const SECRET_KEY = process.env.E2E_TESTNET_SECRET_KEY;

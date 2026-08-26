@@ -2,24 +2,31 @@ import {
   Contract,
   rpc as SorobanRpc,
   TransactionBuilder,
-  Networks,
   BASE_FEE,
   nativeToScVal,
   Address,
   Transaction,
 } from "@stellar/stellar-sdk";
 
+import { NETWORKS, DEFAULT_NETWORK } from "@/lib/networks";
+
 const FACTORY_CONTRACT_ID =
   process.env.NEXT_PUBLIC_VAULT_FACTORY_CONTRACT_ID;
 
-const NETWORK_PASSPHRASE =
-  process.env.NEXT_PUBLIC_NETWORK === "mainnet"
-    ? Networks.PUBLIC_NETWORK_PASSPHRASE
-    : Networks.TESTNET_NETWORK_PASSPHRASE;
+const getCurrentNetwork = () => {
+  if (typeof window !== "undefined") {
+    const savedNetwork = process.env.NEXT_PUBLIC_NETWORK;
+    if (savedNetwork && (savedNetwork === "testnet" || savedNetwork === "mainnet")) {
+      return NETWORKS[savedNetwork];
+    }
+  }
+  return DEFAULT_NETWORK;
+};
 
+const NETWORK = getCurrentNetwork();
+const NETWORK_PASSPHRASE = NETWORK.networkPassphrase;
 const RPC_URL =
-  process.env.NEXT_PUBLIC_STELLAR_RPC_URL ||
-  "https://soroban-testnet.stellar.org";
+  process.env.NEXT_PUBLIC_STELLAR_RPC_URL || NETWORK.rpcUrl;
 
 export interface CreateVaultParams {
   name: string;
