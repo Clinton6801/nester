@@ -483,7 +483,15 @@ jobs:
         run: test -f target/wasm32-unknown-unknown/release/vault_token.wasm
 
       - name: Test contracts
+        env:
+          PROPTEST_RNG_SEED: "29062026"
         run: cargo test --lib
+
+      - name: Run deterministic share-accounting properties
+        env:
+          PROPTEST_CASES: "32"
+          PROPTEST_RNG_SEED: "29062026"
+        run: cargo test -p nester-integration-tests property_tests
 
       # The vault contract's integration tests link against the pre-compiled
       # vault_token.wasm artifact built above. Run them explicitly and fail the
