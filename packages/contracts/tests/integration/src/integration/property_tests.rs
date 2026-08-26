@@ -15,8 +15,9 @@
 extern crate std;
 
 use proptest::prelude::*;
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::Address;
 
+use nester_access_control::Role;
 use nester_test_utils::NesterHarness;
 
 const STROOP: i128 = 1;
@@ -28,6 +29,7 @@ enum VaultOp {
     Deposit { user_idx: usize, amount: i128 },
     Withdraw { user_idx: usize, shares: i128 },
     ReportYield { amount: i128 },
+    ReportLoss { amount: i128 },
 }
 
 fn amount_strategy() -> impl Strategy<Value = i128> {
@@ -52,6 +54,9 @@ fn op_strategy(num_users: usize) -> impl Strategy<Value = VaultOp> {
             shares,
         }),
         (0..10_000_i128).prop_map(|amount| VaultOp::ReportYield {
+            amount: amount * XLM / 100,
+        }),
+        (1..1_000_i128).prop_map(|amount| VaultOp::ReportLoss {
             amount: amount * XLM / 100,
         }),
     ]
@@ -193,12 +198,10 @@ proptest! {
                         continue;
                     }
 
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        h.vault().deposit(&users[user_idx], &amount, &0)
-                    }));
+                    let result = h.vault().try_deposit(&users[user_idx], &amount, &0);
 
-                    if let Ok(shares) = result {
-                        let model_shares = model.deposit(user_idx, amount);
+                    if result.is_ok() {
+                        model.deposit(user_idx, amount);
                         prop_assert!(
                             model.check_conservation(),
                             "share balance consistency violated after deposit"
@@ -206,16 +209,18 @@ proptest! {
                     }
                 }
                 VaultOp::Withdraw { user_idx, shares } => {
-                    if shares == 0 {
+                    let owned = h.token().balance(&users[user_idx]);
+                    let actual_shares = shares.min(owned);
+                    if actual_shares == 0 {
                         continue;
                     }
 
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        h.vault().withdraw(&users[user_idx], &shares, &0)
-                    }));
+                    let result = h
+                        .vault()
+                        .try_withdraw(&users[user_idx], &actual_shares, &0);
 
                     if let Ok(_) = result {
-                        model.withdraw(user_idx, shares);
+                        model.withdraw(user_idx, actual_shares);
                         prop_assert!(
                             model.check_conservation(),
                             "share balance consistency violated after withdraw"
@@ -227,28 +232,18 @@ proptest! {
                         model.report_yield(amount);
                     }
                 }
+                VaultOp::ReportLoss { amount } => model.report_yield(-amount),
             }
         }
 
         prop_assert!(model.check_conservation(), "final share balance consistency");
     }
 
-    // TODO(#1029): this property fails on a real inconsistency, not a flake.
-    // ReferenceModel::withdraw moves the 10% performance fee out of
-    // total_assets while total_shares is unchanged, so share price drops for
-    // the remaining holders (observed 10002000 -> 10000000). Whether the model,
-    // the contract, or the invariant is wrong is a vault fee-accounting
-    // question tracked in #1029, which closes by removing this ignore.
-    //
-    // The test could not run at all until the register_source arity error in
-    // adversarial_tests.rs was fixed, so this has never passed or failed in CI
-    // before. Ignoring it lets the other 263 workspace tests execute.
     #[test]
-    #[ignore = "see #1029: performance fee dilutes remaining holders"]
-    fn prop_share_price_non_decreasing_with_positive_yield(ops in prop::collection::vec(op_strategy(2), 1..30)) {
+    fn prop_share_price_non_decreasing_except_real_loss(ops in prop::collection::vec(op_strategy(2), 1..30)) {
         let (h, users) = setup_harness_with_users(2);
-        let mut model = ReferenceModel::new(2);
-        let mut prev_price = XLM;
+        h.vault().grant_role(&h.admin, &h.admin, &Role::Manager);
+        let mut prev_price = h.vault().share_price();
 
         for op in ops {
             match op {
@@ -257,13 +252,10 @@ proptest! {
                         continue;
                     }
 
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        h.vault().deposit(&users[user_idx], &amount, &0)
-                    }));
+                    let result = h.vault().try_deposit(&users[user_idx], &amount, &0);
 
                     if let Ok(_) = result {
-                        model.deposit(user_idx, amount);
-                        let current_price = model.share_price();
+                        let current_price = h.vault().share_price();
                         prop_assert!(
                             current_price >= prev_price,
                             "share price decreased: {} -> {}",
@@ -274,22 +266,36 @@ proptest! {
                     }
                 }
                 VaultOp::Withdraw { user_idx, shares } => {
-                    if shares == 0 {
+                    let actual_shares = shares.min(h.token().balance(&users[user_idx]));
+                    if actual_shares == 0 {
                         continue;
                     }
 
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        h.vault().withdraw(&users[user_idx], &shares, &0)
-                    }));
+                    let result = h
+                        .vault()
+                        .try_withdraw(&users[user_idx], &actual_shares, &0);
 
                     if let Ok(_) = result {
-                        model.withdraw(user_idx, shares);
+                        let current_price = h.vault().share_price();
+                        // With no shares left there are no remaining holders;
+                        // share_price() intentionally returns its 1.0 bootstrap
+                        // value, so monotonicity is not meaningful in that state.
+                        if h.token().total_supply() > 0 {
+                            prop_assert!(
+                                current_price >= prev_price,
+                                "share price decreased after withdrawal: {} -> {}",
+                                prev_price,
+                                current_price
+                            );
+                        }
+                        prev_price = current_price;
                     }
                 }
                 VaultOp::ReportYield { amount } => {
-                    if amount > 0 {
-                        model.report_yield(amount);
-                        let current_price = model.share_price();
+                    if amount > 0 && h.token().total_supply() > 0 {
+                        h.mint_deposit_tokens(&h.vault_id, amount);
+                        h.vault().report_yield(&h.admin, &amount);
+                        let current_price = h.vault().share_price();
                         prop_assert!(
                             current_price >= prev_price,
                             "share price decreased after yield: {} -> {}",
@@ -297,6 +303,15 @@ proptest! {
                             current_price
                         );
                         prev_price = current_price;
+                    }
+                }
+                VaultOp::ReportLoss { amount } => {
+                    // A real impairment is the sole operation allowed to lower
+                    // the exchange rate. Whether the sanity guard accepts or
+                    // rejects it, establish the resulting price as the new base.
+                    if h.token().total_supply() > 0 {
+                        h.vault().report_yield(&h.admin, &(-amount));
+                        prev_price = h.vault().share_price();
                     }
                 }
             }

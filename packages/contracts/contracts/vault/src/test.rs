@@ -1415,10 +1415,11 @@ fn test_harvest_basic() {
     assert!(result.compounded);
     assert_eq!(result.user, user);
 
-    // new_share_balance must be >= shares before harvest (net yield minted new shares)
+    // Yield was already reflected in the existing shares. Harvest charges the
+    // fee by burning only the harvesting user's fee-equivalent shares.
     assert!(
-        result.new_share_balance >= shares_before,
-        "share balance should have grown after compounding"
+        result.new_share_balance < shares_before,
+        "only fee-equivalent shares should be burned from the harvesting user"
     );
 
     // Performance fee must have been sent to treasury (not sitting in accrued fees)
@@ -1649,8 +1650,7 @@ fn test_harvest_impairment_no_fee_charged() {
 }
 
 #[test]
-fn test_harvest_new_share_balance_increases() {
-    // After harvest, user's share balance should be greater than before
+fn harvest_fee_burns_only_the_harvesting_users_shares() {
     let (env, admin, token, vault, _treasury) = setup();
     let user = Address::generate(&env);
     let deposit = 1_000 * XLM;
@@ -1662,18 +1662,57 @@ fn test_harvest_new_share_balance_increases() {
     vault.grant_role(&admin, &admin, &Role::Manager);
     vault.report_yield(&admin, &(500 * XLM));
 
-    let shares_before = vault.get_shares(&admin);
-    let result = vault.harvest(&admin);
+    let shares_before = vault.get_shares(&user);
+    let result = vault.harvest(&user);
 
     assert!(
-        result.new_share_balance >= shares_before,
-        "share balance must not decrease after harvest with positive yield"
+        result.new_share_balance < shares_before,
+        "the performance fee must be charged in the harvesting user's shares"
     );
     assert_eq!(
         result.new_share_balance,
-        vault.get_shares(&admin),
+        vault.get_shares(&user),
         "new_share_balance in result must match on-chain balance"
     );
+}
+
+#[test]
+fn performance_fee_does_not_dilute_passive_holders() {
+    let (env, admin, token, vault, treasury) = setup();
+    let harvester = Address::generate(&env);
+    let passive_holder = Address::generate(&env);
+    let deposit = 1_000 * XLM;
+    let yield_amount = 200 * XLM;
+
+    mint(&token, &harvester, deposit);
+    mint(&token, &passive_holder, deposit);
+    vault.deposit(&harvester, &deposit, &0);
+    vault.deposit(&passive_holder, &deposit, &0);
+
+    vault.grant_role(&admin, &admin, &Role::Manager);
+    mint(&token, &vault.address, yield_amount);
+    vault.report_yield(&admin, &yield_amount);
+
+    let passive_value_before = vault.get_balance(&passive_holder);
+    let share_price_before = vault.share_price();
+    let treasury_before = token::Client::new(&env, &token.address).balance(&treasury);
+
+    let result = vault.harvest(&harvester);
+
+    let share_price_after = vault.share_price();
+    let passive_value_after = vault.get_balance(&passive_holder);
+    let treasury_after = token::Client::new(&env, &token.address).balance(&treasury);
+
+    assert!(result.performance_fee > 0, "the regression must exercise a fee");
+    assert!(
+        share_price_after >= share_price_before,
+        "one user's performance fee must not lower the exchange rate"
+    );
+    assert!(
+        passive_value_after >= passive_value_before,
+        "a passive holder must not lose value when another user harvests"
+    );
+    assert_eq!(treasury_after - treasury_before, result.performance_fee);
 }
 
 #[test]
